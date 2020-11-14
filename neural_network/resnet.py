@@ -111,7 +111,7 @@ class ResNet(nn.Module):
         self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
         self.conv1x1_4 = nn.Conv2d(2048, 256, 1, bias = False)
         self.conv1x1_fuse = nn.Conv2d(64 + 128 + 256, 1, 1, bias = False)
-        self.instance_norm = nn.InstanceNorm2d(2)
+        self.instance_norm = nn.InstanceNorm2d(1)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -170,10 +170,11 @@ class ResNet(nn.Module):
         x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = True)
         
         x_fuse = torch.cat([x2, x3, x4], dim = 1)
-        x_fuse = self.instance_norm(x_fuse)
         x_fuse_refine = self.feature_refined(x_fuse)
         x_fuse = self.conv1x1_fuse(x_fuse)
+        x_fuse = self.instance_norm(x_fuse)
         x_fuse_refine = self.conv1x1_fuse(x_fuse_refine)
+        x_fuse_refine = self.instance_norm(x_fuse_refine)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
