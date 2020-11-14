@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.resnet as Resnet
+import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -118,7 +118,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = Resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -148,6 +148,15 @@ def load_param(model):
                 print(name)
             except:
                 print("{} can not load.".format(name))
+                
+# =============================================================================
+#         if name in model.backbone2.state_dict():
+#             try:
+#                 model.backbone2.state_dict()[name].copy_(param)
+#                 print(name)
+#             except:
+#                 print("{} can not load.".format(name))
+# =============================================================================
             
     return model
 
@@ -162,21 +171,22 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
         
-    output, cam, cam_refined = model(b_data)
-    _, predicted = torch.max(output.data, 1)
+    output_1, _, _ = model(b_data)
+    _, predicted = torch.max(output_1.data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output, b_label)
-    er_loss = torch.mean(torch.abs(cam - cam_refined))
+    cls_loss_1 = loss_func[0](output_1, b_label)
+    #cls_loss_2 = loss_func[0](output_2, b_label)
+    #er_loss = torch.mean(torch.abs(cam - cam_refined))
     
-    loss = cls_loss + er_loss
+    loss = cls_loss_1# + cls_loss_2 + er_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step() 
     
-    return loss.data, cls_loss.data, er_loss.data, predicted.data    
+    return loss.data, cls_loss_1.data, predicted.data    
 
 #training
 def training(model, job):
@@ -200,7 +210,8 @@ def training(model, job):
             confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
         for phase in job:
             loss_rate = 0.0
-            cls_rate = 0.0
+            cls_rate_1 = 0.0
+            cls_rate_2 = 0.0
             er_rate = 0.0
             correct = 0.0
             
@@ -210,7 +221,7 @@ def training(model, job):
                 model.train(False)
                 
             for step, (data, label) in enumerate(image_data[phase]):
-                loss, cls_loss, er_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                loss, cls_loss_1, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                 if use_gpu:
                     b_data = data.to(DEVICE)
                     b_label = label.to(DEVICE)
@@ -219,15 +230,17 @@ def training(model, job):
                     b_label = label
                     
                 loss_rate += loss * b_data.size(0)
-                cls_rate += cls_loss * b_data.size(0)
-                er_rate += er_loss * b_data.size(0)
+                cls_rate_1 += cls_loss_1 * b_data.size(0)
+                #cls_rate_2 += cls_loss_2 * b_data.size(0)
+                #er_rate += er_loss * b_data.size(0)
                 
                 correct += (predicted == b_label).sum().item()
                 if CON_MATRIX:
                     np.add.at(confusion_matrix[phase], tuple([predicted.cpu().detach().numpy(), b_label.cpu().detach().numpy()]), 1)
             
             loss_rate = loss_rate / dataset_sizes[phase]
-            cls_rate = cls_rate / dataset_sizes[phase]
+            cls_rate_1 = cls_rate_1 / dataset_sizes[phase]
+            cls_rate_2 = cls_rate_2 / dataset_sizes[phase]
             er_rate = er_rate / dataset_sizes[phase]
             correct = correct / dataset_sizes[phase]
 
@@ -263,7 +276,8 @@ def training(model, job):
             print("dataset : {}".format(data_dir))
             print("Model name : {}".format(model_name))
             print("{} set loss : {:.6f}".format(phase, loss_rate))
-            print("{} set cls_loss : {:.6f}".format(phase, cls_rate))
+            print("{} set cls_loss_1 : {:.6f}".format(phase, cls_rate_1))
+            print("{} set cls_loss_2 : {:.6f}".format(phase, cls_rate_2))
             print("{} set er_loss : {:.6f}".format(phase, er_rate))
             print("{} set min loss : {:.6f}".format(phase, min_loss[phase]))
             print("{} set acc : {:.6f}%".format(phase, correct * 100.0))

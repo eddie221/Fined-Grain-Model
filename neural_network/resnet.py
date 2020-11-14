@@ -110,7 +110,7 @@ class ResNet(nn.Module):
         self.conv1x1_2 = nn.Conv2d(512, 64, 1, bias = False)
         self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
         self.conv1x1_4 = nn.Conv2d(2048, 256, 1, bias = False)
-        self.conv1x1_fuse = nn.Conv2d(64 + 128 + 256, 2, 1, bias = False)
+        self.conv1x1_fuse = nn.Conv2d(64 + 128 + 256, 1, 1, bias = False)
         self.instance_norm = nn.InstanceNorm2d(2)
          
         self.dropout = nn.Dropout(p = 0.5)
@@ -213,15 +213,17 @@ def resnet50(pretrained=False, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
-    if pretrained:
-        params = torch.load("./pkl/resnet50.pth")
-        for name, param in params.items():
-            if name in model.state_dict():
-                try:
-                    model.state_dict()[name].copy_(param)
-                    print(name)
-                except:
-                    print("{} can not load.".format(name))
+# =============================================================================
+#     if pretrained:
+#         params = torch.load("./pkl/resnet50.pth")
+#         for name, param in params.items():
+#             if name in model.state_dict():
+#                 try:
+#                     model.state_dict()[name].copy_(param)
+#                     print(name)
+#                 except:
+#                     print("{} can not load.".format(name))
+# =============================================================================
     return model
 
 
