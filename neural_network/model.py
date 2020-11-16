@@ -13,7 +13,6 @@ class Model_Net(nn.Module):
     def __init__(self, num_classes):
         super(Model_Net, self).__init__()
         self.backbone1 = resnet50(num_classes = num_classes)
-        self.backbone2 = resnet50(num_classes = num_classes)
         
     def forward(self, x):
         if x.get_device() == -1:
