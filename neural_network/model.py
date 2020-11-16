@@ -19,12 +19,12 @@ class Model_Net(nn.Module):
             device = 'cpu'
         else:
             device = x.get_device()
-        result_cam, cam, cam_rf = self.backbone1(x)
-        mask = torch.where(cam > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
+        result_cam, cam_1, cam_rf_1 = self.backbone1(x)
+        mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
         
         mask = torch.nn.functional.interpolate(mask, size = x.shape[2], mode = 'bilinear', align_corners = True)
         
         mask_x = mask * x
         
-        result, _, _ = self.backbone2(mask_x.detach())
-        return result, result_cam, cam, cam_rf
+        result, cam_2, cam_rf_2 = self.backbone1(mask_x.detach())
+        return result, result_cam, cam_1, cam_rf_1, cam_2, cam_rf_2

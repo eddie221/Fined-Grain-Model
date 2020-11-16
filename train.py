@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.resnet as resnet
+import neural_network.model as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -118,7 +118,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.Model_Net(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -142,9 +142,9 @@ def load_param(model):
     # load resnet
     params = torch.load("../COFENet/pkl/resnet50.pth")
     for name, param in params.items():
-        if name in model.state_dict():
+        if name in model.backbone1.state_dict():
             try:
-                model.state_dict()[name].copy_(param)
+                model.backbone1.state_dict()[name].copy_(param)
                 print(name)
             except:
                 print("{} can not load.".format(name))
@@ -171,22 +171,23 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
         
-    output_1, _, _ = model(b_data)
-    _, predicted = torch.max(output_1.data, 1)
+    output_1, output_2, cam_1, cam_rf_1, cam_2, cam_rf_2 = model(b_data)
+    _, predicted = torch.max(output_2.data, 1)
     
     #loss function
     cls_loss_1 = loss_func[0](output_1, b_label)
-    #cls_loss_2 = loss_func[0](output_2, b_label)
-    #er_loss = torch.mean(torch.abs(cam - cam_refined))
+    cls_loss_2 = loss_func[0](output_2, b_label)
+    er_loss = torch.mean(torch.abs(cam_1 - cam_rf_1)) + torch.mean(torch.abs(cam_2 - cam_rf_2)) +\
+        torch.mean(torch.abs(cam_rf_1 - cam_rf_2))
     
-    loss = cls_loss_1# + cls_loss_2 + er_loss
+    loss = cls_loss_2 + er_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step() 
     
-    return loss.data, cls_loss_1.data, predicted.data    
+    return loss.data, cls_loss_1.data, cls_loss_1.data, er_loss.data, predicted.data    
 
 #training
 def training(model, job):
@@ -221,7 +222,7 @@ def training(model, job):
                 model.train(False)
                 
             for step, (data, label) in enumerate(image_data[phase]):
-                loss, cls_loss_1, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                loss, cls_loss_1, cls_loss_2, er_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                 if use_gpu:
                     b_data = data.to(DEVICE)
                     b_label = label.to(DEVICE)
@@ -231,8 +232,7 @@ def training(model, job):
                     
                 loss_rate += loss * b_data.size(0)
                 cls_rate_1 += cls_loss_1 * b_data.size(0)
-                #cls_rate_2 += cls_loss_2 * b_data.size(0)
-                #er_rate += er_loss * b_data.size(0)
+                cls_rate_2 += cls_loss_2 * b_data.size(0)
                 
                 correct += (predicted == b_label).sum().item()
                 if CON_MATRIX:
