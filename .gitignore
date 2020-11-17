@@ -2,3 +2,9 @@
 .spyproject/
 
 __pycache__/
+
+show_img/
+
+pkl/
+
+test_func.py

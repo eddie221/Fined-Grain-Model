@@ -6,7 +6,7 @@ Created on Mon Nov 16 10:58:31 2020
 @author: eddie
 """
 
-import neural_network.resnet as resnet
+import neural_network.model as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -119,7 +119,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.Model_Net(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -141,7 +141,7 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
-    params = torch.load("./pkl/cofe_resnet_20201114-2.pkl")['model_param']
+    params = torch.load("./pkl/cofe_resnet_20201116-2.pkl")['model_param']
     print(params)
     for name, param in params.items():
         if name in model.state_dict():
@@ -173,15 +173,16 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     
-    output_1, x4 = model(b_data)
+    output_1, output_2, cam, cam_rf, cam_2, cam_2_rf, x4 = model(b_data)
     _, axes = plt.subplots(3,2)
     axes[0, 0].set_title("label : {}".format(label[0]))
     axes[0, 0].imshow(data[0].permute(1, 2, 0))
-    axes[1, 0].imshow(torch.sum(x4, dim = 1).detach().cpu()[0])
-    mask = torch.sum(x4, dim = 1).detach().cpu()[0]
-    mask = torch.where(mask / 2048 > 0.5, torch.tensor(1), torch.tensor(0))
-    axes[2, 0].imshow(mask)
+    axes[1, 0].imshow(cam.detach().cpu()[0][0])
+    axes[2, 0].imshow(cam_rf.detach().cpu()[0][0])
     axes[0, 1].axis(False)
+    axes[0, 1].imshow(x4[0, 0].cpu().detach())
+    axes[1, 1].imshow(cam_2.detach().cpu()[0][0])
+    axes[2, 1].imshow(cam_2_rf.detach().cpu()[0][0])
 # =============================================================================
 #     mask = torch.where(cam.detach().cpu()[0][0] > 0.5, torch.tensor(1), torch.tensor(0))
 #     mask_refine = torch.where(cam_refine.detach().cpu()[0][0] > 0.5, torch.tensor(1), torch.tensor(0))
@@ -233,10 +234,7 @@ def training(model, job):
             er_rate = 0.0
             correct = 0.0
             
-            if phase == 'train':
-                model.train(True)
-            else:
-                model.train(False)
+            model.train(False)
                 
             for step, (data, label) in enumerate(image_data[phase]):
                 loss, cls_loss_1, predicted = train_step(model, data, label, loss_func, optimizers, phase)
@@ -313,4 +311,4 @@ def rand_bbox(size, lam):
 if __name__ == '__main__':
     model = create_nn_model()
     model = load_param(model)
-    training = training(model, ['val'])
+    training = training(model, ['train'])
