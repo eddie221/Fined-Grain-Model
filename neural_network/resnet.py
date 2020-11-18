@@ -112,8 +112,6 @@ class ResNet(nn.Module):
         self.conv1x1_4 = nn.Conv2d(2048, 256, 1, bias = False)
         self.conv1x1_fuse = nn.Conv2d(64 + 128 + 256, 1, 1, bias = False)
         self.instance_norm = nn.InstanceNorm2d(1)
-        
-        self.SE_fc = nn.Linear(64 + 128 + 256, num_classes)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -142,17 +140,6 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
     
-    def PCM(self, cam, feature):
-        n, c, h, w = feature.shape
-        cam = torch.nn.functional.interpolate(cam, (h, w), mode = 'bilinear', align_corners = True).view(n, -1, h * w)
-        feature = feature.view(n, -1, h * w)
-        feature = feature / (torch.norm(feature, dim=1, keepdim = True) + 1e-5)
-        
-        correlation = torch.nn.functional.relu(torch.matmul(feature.transpose(1, 2), feature), inplace=True)
-        correlation = correlation / (torch.sum(correlation, dim = 1, keepdim = True) + 1e-5)
-        cam_refined = torch.matmul(cam, correlation).view(n, -1, h, w)
-        return cam_refined
-    
     def feature_refined(self, cam):
         B, C, H, W = cam.shape
         cam_flatten = cam.contiguous().view(cam.shape[0], cam.shape[1], -1)
@@ -163,14 +150,7 @@ class ResNet(nn.Module):
         cam_flatten = cam.contiguous().view(cam.shape[0], cam.shape[1], -1)
         
         cam_refined = torch.matmul(cam_flatten.transpose(1, 2), cam_cor).transpose(1, 2).contiguous().view(B, C, H, W)
-        
         return cam_refined
-    
-    def SE_net(self, x):
-        x_linear = self.avgpool(x)
-        x_linear = x_linear.view(x.shape[0], x.shape[1], 1, 1)
-        x = x * x_linear.expand_as(x)
-        return x
     
     def forward(self, x):
         x = self.conv1(x)
@@ -190,7 +170,6 @@ class ResNet(nn.Module):
         x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = True)
         
         x_fuse = torch.cat([x2, x3, x4], dim = 1)
-        x_fuse = self.SE_net(x_fuse)
         x_fuse_refine = self.feature_refined(x_fuse)
         x_fuse = self.conv1x1_fuse(x_fuse)
         x_fuse = self.instance_norm(x_fuse)

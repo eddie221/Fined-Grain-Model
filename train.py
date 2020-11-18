@@ -130,7 +130,7 @@ def create_opt_loss(model, bal_var):
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
                  torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 100], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 100, 150], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss()]
@@ -175,20 +175,17 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     _, predicted = torch.max(output_2.data, 1)
     
     #loss function
-    cls_loss_1 = loss_func[0](output_1, b_label)
-    cls_loss_2 = loss_func[0](output_2, b_label)
+    cls_loss = loss_func[0](output_1, b_label) + loss_func[0](output_2, b_label)
     er_loss = torch.mean(torch.abs(cam_1 - cam_rf_1)) + torch.mean(torch.abs(cam_2 - cam_rf_2))
-    cam_diff = torch.mean(torch.nn.functional.cosine_similarity(cam_rf_1, cam_rf_2))
     
-    
-    loss = cls_loss_2 + er_loss + cam_diff
+    loss = cls_loss + er_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
     
-    return loss.data, cls_loss_1.data, cls_loss_1.data, er_loss.data, predicted.data    
+    return loss.data, cls_loss.data, er_loss.data, predicted.data    
 
 #training
 def training(model, job):
@@ -223,7 +220,7 @@ def training(model, job):
                 model.train(False)
                 
             for step, (data, label) in enumerate(image_data[phase]):
-                loss, cls_loss_1, cls_loss_2, er_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                loss, cls_loss, er_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                 if use_gpu:
                     b_data = data.to(DEVICE)
                     b_label = label.to(DEVICE)
@@ -232,8 +229,7 @@ def training(model, job):
                     b_label = label
                     
                 loss_rate += loss * b_data.size(0)
-                cls_rate_1 += cls_loss_1 * b_data.size(0)
-                cls_rate_2 += cls_loss_2 * b_data.size(0)
+                cls_rate_1 += cls_loss * b_data.size(0)
                 
                 correct += (predicted == b_label).sum().item()
                 if CON_MATRIX:
