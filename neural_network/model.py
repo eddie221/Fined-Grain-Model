@@ -13,6 +13,7 @@ class Model_Net(nn.Module):
     def __init__(self, num_classes):
         super(Model_Net, self).__init__()
         self.backbone1 = resnet50(num_classes = num_classes)
+        self.backbone2 = resnet50(num_classes = num_classes)
         
     def forward(self, x):
         if x.get_device() == -1:
@@ -26,5 +27,5 @@ class Model_Net(nn.Module):
         
         mask_x = mask * x
         
-        result_2, cam_2, cam_rf_2 = self.backbone1(mask_x.detach())
+        result_2, cam_2, cam_rf_2 = self.backbone2(mask_x.detach())
         return result_1, result_2, cam_1, cam_rf_1, cam_2, cam_rf_2

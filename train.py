@@ -149,6 +149,12 @@ def load_param(model):
             except:
                 print("{} can not load.".format(name))
                 
+        if name in model.backbone2.state_dict():
+            try:
+                model.backbone2.state_dict()[name].copy_(param)
+                print(name)
+            except:
+                print("{} can not load.".format(name))
 # =============================================================================
 #         if name in model.backbone2.state_dict():
 #             try:
