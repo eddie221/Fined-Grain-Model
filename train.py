@@ -178,11 +178,13 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         optimizer.zero_grad() 
         
     output_1, output_2, cam_1, cam_rf_1, cam_2, cam_rf_2 = model(b_data)
-    _, predicted = torch.max(output_2.data, 1)
+    _, predicted = torch.max(output_2[0].data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1, b_label) + loss_func[0](output_2, b_label)
-    
+    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_2[0], b_label)
+    for i in range(1, len(output_1)):
+        cls_loss += loss_func[0](output_1[i], b_label) + loss_func[0](output_2[i], b_label)
+                   
     er_loss = torch.mean(1.0 - torch.nn.functional.cosine_similarity(cam_1.view(cam_1.shape[0], -1), cam_rf_1.view(cam_rf_1.shape[0], -1))) +\
         torch.mean(1.0 - torch.nn.functional.cosine_similarity(cam_2.view(cam_2.shape[0], -1), cam_rf_2.view(cam_rf_2.shape[0], -1)))
     
@@ -238,6 +240,7 @@ def training(model, job):
                     
                 loss_rate += loss * b_data.size(0)
                 cls_rate_1 += cls_loss * b_data.size(0)
+                er_rate += er_loss * b_data.size(0)
                 
                 correct += (predicted == b_label).sum().item()
                 if CON_MATRIX:

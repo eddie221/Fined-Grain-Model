@@ -183,12 +183,12 @@ class ResNet(nn.Module):
         
         x2_cls = self.avgpool(x2_cls)
         x2_cls = x2_cls.view(x2_cls.size(0), -1)
-        x2_cls = self.dropout(x)
+        x2_cls = self.dropout(x2_cls)
         x2_cls = self.fc_2(x2_cls)
         
         x3_cls = self.avgpool(x3_cls)
         x3_cls = x3_cls.view(x3_cls.size(0), -1)
-        x3_cls = self.dropout(x)
+        x3_cls = self.dropout(x3_cls)
         x3_cls = self.fc_3(x3_cls)
         
         x = self.avgpool(x)
