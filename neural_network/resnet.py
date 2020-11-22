@@ -106,8 +106,6 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.fc_2 = nn.Linear(512, num_classes)
-        self.fc_3 = nn.Linear(1024, num_classes)
         
         self.conv1x1_2 = nn.Conv2d(512, 64, 1, bias = False)
         self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
@@ -162,10 +160,8 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
-        x2_cls = x
         x2 = self.conv1x1_2(x)
         x = self.layer3(x)
-        x3_cls = x
         x3 = self.conv1x1_3(x)
         x = self.layer4(x)
         x4 = self.conv1x1_4(x)
@@ -180,23 +176,12 @@ class ResNet(nn.Module):
         x_fuse_refine = self.conv1x1_fuse(x_fuse_refine)
         x_fuse_refine = self.instance_norm(x_fuse_refine)
         
-        
-        x2_cls = self.avgpool(x2_cls)
-        x2_cls = x2_cls.view(x2_cls.size(0), -1)
-        x2_cls = self.dropout(x)
-        x2_cls = self.fc_2(x2_cls)
-        
-        x3_cls = self.avgpool(x3_cls)
-        x3_cls = x3_cls.view(x3_cls.size(0), -1)
-        x3_cls = self.dropout(x)
-        x3_cls = self.fc_3(x3_cls)
-        
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
 
-        return x, x2_cls, x3_cls, x_fuse, x_fuse_refine
+        return x, x_fuse, x_fuse_refine
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
