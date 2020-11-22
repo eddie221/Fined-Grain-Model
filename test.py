@@ -6,7 +6,7 @@ Created on Mon Nov 16 10:58:31 2020
 @author: eddie
 """
 
-import neural_network.resnet as resnet
+import neural_network.model as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -96,7 +96,7 @@ def load_data():
                         for x in ['train', 'val']}
     
     image_dataloader = {x : torch.utils.data.DataLoader(image_datasets[x],
-                                                        batch_size=BATCH_SIZE,
+                                                        batch_size=1,
                                                         #sampler = data_sampler[x],
                                                         shuffle=True,
                                                         num_workers=16)
@@ -119,7 +119,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.Model_Net(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -141,8 +141,7 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
-    params = torch.load("./pkl/cofe_resnet_20201114-2.pkl")['model_param']
-    print(params)
+    params = torch.load("./pkl/cofe_resnet_20201119-1.pkl")['model_param']
     for name, param in params.items():
         if name in model.state_dict():
             try:
@@ -173,12 +172,24 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     
-    output_1, cam, cam_rf= model(b_data)
-    _, axes = plt.subplots(3,2)
-    axes[0, 0].set_title("label : {}".format(label[0]))
+    output_1, _, cam_1, cam_rf_1, cam_2, cam_rf_2= model(b_data)
+    fig, axes = plt.subplots(3,2)
+    fig.suptitle("label : {}".format(label[0]), fontsize=16)
+    axes[0, 0].set_title("Class Activation Map")
     axes[0, 0].imshow(data[0].permute(1, 2, 0))
-    axes[1, 0].imshow(cam.detach().cpu()[0][0])
-    axes[2, 0].imshow(cam_rf.detach().cpu()[0][0])
+    axes[1, 0].imshow(cam_1.detach().cpu()[0][0])
+    axes[2, 0].imshow(cam_rf_1.detach().cpu()[0][0])
+    
+    mask = torch.where(cam_1.cpu() > 0.5, torch.tensor(1.), torch.tensor(0.))
+        
+    mask = torch.nn.functional.interpolate(mask, size = data.shape[2], mode = 'bilinear', align_corners = True)
+    
+    mask_x = mask * data
+    
+    axes[0, 1].set_title("Refined Class Activation Map")
+    axes[0, 1].imshow(mask_x[0].permute(1, 2, 0))
+    axes[1, 1].imshow(cam_2.detach().cpu()[0][0])
+    axes[2, 1].imshow(cam_rf_2.detach().cpu()[0][0])
 # =============================================================================
 #     axes[0, 1].axis(False)
 #     axes[0, 1].imshow(x4[0, 0].cpu().detach())
@@ -196,6 +207,8 @@ def train_step(model, data, label, loss_func, optimizers, phase):
 #     axes[2, 1].imshow(mask_refine, cmap = 'gray')
 # =============================================================================
     _, predicted = torch.max(output_1.data, 1)
+    print(predicted)
+    print(label)
     
     #loss function
     cls_loss_1 = loss_func[0](output_1, b_label)
@@ -223,7 +236,7 @@ def training(model, job):
     best_epoch = 0
     min_loss_epoch = 0
     optimizers, lr_schedulers, loss_func = create_opt_loss(model, bal_var)
-    for epoch in range(EPOCH):
+    for epoch in range(1):
         start = time.time()
         print('Epoch {}/{}'.format(epoch, EPOCH - 1))
         print('-' * 10)
@@ -313,4 +326,4 @@ def rand_bbox(size, lam):
 if __name__ == '__main__':
     model = create_nn_model()
     model = load_param(model)
-    training = training(model, ['val'])
+    training = training(model, ['train'])
