@@ -106,6 +106,14 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
+        
+        self.conv1x1_2 = nn.Conv2d(512, 128, 1, bias = False)
+        self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
+        self.conv1x1_4 = nn.Conv2d(2048, 128, 1, bias = False)
+        
+        self.fc_4 = nn.Linear(128, num_classes)
+        self.fc_34 = nn.Linear(128 * 2, num_classes)
+        self.fc_234 = nn.Linear(128 * 3, num_classes)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -134,6 +142,28 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
     
+    def feature_pyramid(self, x2, x3, x4):
+        b, _, _, _ = x2.shape
+        x2 = self.conv1x1_2(x2)
+        x3 = self.conv1x1_3(x3)
+        x4 = self.conv1x1_4(x4)
+        
+        x4_linear = self.avgpool(x4).contiguous().view(b, -1)
+        x4_cls = self.fc_4(x4_linear)
+        
+        x4_up = nn.functional.interpolate(x4, size = x3.size(2), mode = 'bilinear', align_corners = True)
+        x34 = torch.cat([x4_up, x3], dim = 1)
+        x34_linear = self.avgpool(x34).contiguous().view(b, -1)
+        x34_cls = self.fc_34(x34_linear)
+        
+        x34_up = nn.functional.interpolate(x34, size = x2.size(2), mode = 'bilinear', align_corners = True)
+        x234 = torch.cat([x34_up, x2], dim = 1)
+        x234_linear = self.avgpool(x234).contiguous().view(b, -1)
+        x234_cls = self.fc_234(x234_linear)
+        
+        return x4_cls, x34_cls, x234_cls, x4, x34, x234
+        
+    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -142,16 +172,20 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
+        x2 = x
         x = self.layer3(x)
+        x3 = x
         x = self.layer4(x)
-        feature = x
+        x4 = x
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
-
-        return x, feature
+        
+        x4_cls, x34_cls, x234_cls, x4, x34, x234 = self.feature_pyramid(x2, x3, x4)
+        
+        return x, x4_cls, x34_cls, x234_cls, x4, x34, x234
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.

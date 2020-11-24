@@ -181,11 +181,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     _, predicted = torch.max(output_2.data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1, b_label) + loss_func[0](output_2, b_label)
-# =============================================================================
-#     for i in range(1, len(output_1)):
-#         cls_loss += loss_func[0](output_1[i], b_label) + loss_func[0](output_2[i], b_label)
-# =============================================================================
+    cls_loss = loss_func[0](output_1[0], b_label)# + loss_func[0](output_2, b_label)
+    for i in range(1, len(output_1)):
+        cls_loss = cls_loss + loss_func[0](output_1[i], b_label)
+    cls_loss = cls_loss + loss_func[0](output_2, b_label)
 
     er_loss = torch.mean(torch.abs(cam_1.view(cam_1.shape[0], -1) - cam_rf_1.view(cam_rf_1.shape[0], -1))) +\
         torch.mean(torch.abs(cam_2.view(cam_2.shape[0], -1) - cam_rf_2.view(cam_rf_2.shape[0], -1)))
