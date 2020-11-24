@@ -106,12 +106,6 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        
-        self.conv1x1_2 = nn.Conv2d(512, 64, 1, bias = False)
-        self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
-        self.conv1x1_4 = nn.Conv2d(2048, 256, 1, bias = False)
-        self.conv1x1_fuse = nn.Conv2d(64 + 128 + 256, 1, 1, bias = False)
-        self.instance_norm = nn.InstanceNorm2d(1)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -140,18 +134,6 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
     
-    def feature_refined(self, cam):
-        B, C, H, W = cam.shape
-        cam_flatten = cam.contiguous().view(cam.shape[0], cam.shape[1], -1)
-        cam_flatten = cam_flatten / torch.norm(cam_flatten, dim = 2, keepdim = True)
-        cam_cor = torch.matmul(cam_flatten, cam_flatten.transpose(1, 2))
-        cam_cor = self.relu(cam_cor)
-        cam_cor = cam_cor / (torch.sum(cam_cor, dim = 1, keepdim = True) + 1e-5)
-        cam_flatten = cam.contiguous().view(cam.shape[0], cam.shape[1], -1)
-        
-        cam_refined = torch.matmul(cam_flatten.transpose(1, 2), cam_cor).transpose(1, 2).contiguous().view(B, C, H, W)
-        return cam_refined
-    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -160,28 +142,16 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
-        x2 = self.conv1x1_2(x)
         x = self.layer3(x)
-        x3 = self.conv1x1_3(x)
         x = self.layer4(x)
-        x4 = self.conv1x1_4(x)
-        
-        x2 = torch.nn.functional.interpolate(x2, size = x3.shape[2], mode = 'bilinear', align_corners = True)
-        x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = True)
-        
-        x_fuse = torch.cat([x2, x3, x4], dim = 1)
-        x_fuse_refine = self.feature_refined(x_fuse)
-        x_fuse = self.conv1x1_fuse(x_fuse)
-        x_fuse = self.instance_norm(x_fuse)
-        x_fuse_refine = self.conv1x1_fuse(x_fuse_refine)
-        x_fuse_refine = self.instance_norm(x_fuse_refine)
+        feature = x
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
 
-        return x, x_fuse, x_fuse_refine
+        return x, feature
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
