@@ -96,7 +96,7 @@ def load_data():
                         for x in ['train', 'val']}
     
     image_dataloader = {x : torch.utils.data.DataLoader(image_datasets[x],
-                                                        batch_size=2,
+                                                        batch_size=1,
                                                         #sampler = data_sampler[x],
                                                         shuffle=True,
                                                         num_workers=16)
@@ -141,7 +141,7 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
-    params = torch.load("./pkl/cofe_resnet_20201122-1.pkl")['model_param']
+    params = torch.load("./pkl/cofe_resnet_20201124-1.pkl")['model_param']
     for name, param in params.items():
         if name in model.state_dict():
             try:

@@ -107,13 +107,15 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
         
-        self.conv1x1_2 = nn.Conv2d(512, 128, 1, bias = False)
-        self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
-        self.conv1x1_4 = nn.Conv2d(2048, 128, 1, bias = False)
+        self.conv1x1_2 = nn.Conv2d(512, 256, 1, bias = False)
+        self.conv3x3_2 = nn.Conv2d(256, 256, 3, padding = 1)
+        self.conv1x1_3 = nn.Conv2d(1024, 256, 1, bias = False)
+        self.conv3x3_3 = nn.Conv2d(256, 256, 3, padding = 1)
+        self.conv1x1_4 = nn.Conv2d(2048, 256, 1, bias = False)
         
-        self.fc_4 = nn.Linear(128, num_classes)
-        self.fc_34 = nn.Linear(128 * 2, num_classes)
-        self.fc_234 = nn.Linear(128 * 3, num_classes)
+        self.fc_4 = nn.Linear(256, num_classes)
+        self.fc_34 = nn.Linear(256, num_classes)
+        self.fc_234 = nn.Linear(256, num_classes)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -144,20 +146,20 @@ class ResNet(nn.Module):
     
     def feature_pyramid(self, x2, x3, x4):
         b, _, _, _ = x2.shape
-        x2 = self.conv1x1_2(x2)
-        x3 = self.conv1x1_3(x3)
+        x2 = self.conv3x3_2(self.conv1x1_2(x2))
+        x3 = self.conv3x3_3(self.conv1x1_3(x3))
         x4 = self.conv1x1_4(x4)
         
         x4_linear = self.avgpool(x4).contiguous().view(b, -1)
         x4_cls = self.fc_4(x4_linear)
         
         x4_up = nn.functional.interpolate(x4, size = x3.size(2), mode = 'bilinear', align_corners = True)
-        x34 = torch.cat([x4_up, x3], dim = 1)
+        x34 = x3 + x4_up
         x34_linear = self.avgpool(x34).contiguous().view(b, -1)
         x34_cls = self.fc_34(x34_linear)
         
         x34_up = nn.functional.interpolate(x34, size = x2.size(2), mode = 'bilinear', align_corners = True)
-        x234 = torch.cat([x34_up, x2], dim = 1)
+        x234 = x2 + x34_up
         x234_linear = self.avgpool(x234).contiguous().view(b, -1)
         x234_cls = self.fc_234(x234_linear)
         
