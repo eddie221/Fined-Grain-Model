@@ -173,25 +173,23 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         optimizer.zero_grad() 
     
     output_1, output_2, cam_1, cam_rf_1, cam_2, cam_rf_2 = model(b_data)
-# =============================================================================
-#     fig, axes = plt.subplots(3,2)
-#     fig.suptitle("label : {}".format(label[0]), fontsize=16)
-#     axes[0, 0].set_title("Class Activation Map")
-#     axes[0, 0].imshow(data[0].permute(1, 2, 0))
-#     axes[1, 0].imshow(cam_1.detach().cpu()[0][0])
-#     axes[2, 0].imshow(cam_rf_1.detach().cpu()[0][0])
-#     
-#     mask = torch.where(cam_1.cpu() > 0.5, torch.tensor(1.), torch.tensor(0.))
-#         
-#     mask = torch.nn.functional.interpolate(mask, size = data.shape[2], mode = 'bilinear', align_corners = True)
-#     
-#     mask_x = mask * data
-#     
-#     axes[0, 1].set_title("Refined Class Activation Map")
-#     axes[0, 1].imshow(mask_x[0].permute(1, 2, 0))
-#     axes[1, 1].imshow(cam_2.detach().cpu()[0][0])
-#     axes[2, 1].imshow(cam_rf_2.detach().cpu()[0][0])
-# =============================================================================
+    fig, axes = plt.subplots(3,2)
+    fig.suptitle("label : {}".format(label[0]), fontsize=16)
+    axes[0, 0].set_title("Class Activation Map")
+    axes[0, 0].imshow(data[0].permute(1, 2, 0))
+    axes[1, 0].imshow(cam_1.detach().cpu()[0][0])
+    axes[2, 0].imshow(cam_rf_1.detach().cpu()[0][0])
+    
+    mask = torch.where(cam_1.cpu() > 0.5, torch.tensor(1.), torch.tensor(0.))
+        
+    mask = torch.nn.functional.interpolate(mask, size = data.shape[2], mode = 'bilinear', align_corners = True)
+    
+    mask_x = mask * data
+    
+    axes[0, 1].set_title("Refined Class Activation Map")
+    axes[0, 1].imshow(mask_x[0].permute(1, 2, 0))
+    axes[1, 1].imshow(cam_2.detach().cpu()[0][0])
+    axes[2, 1].imshow(cam_rf_2.detach().cpu()[0][0])
 # =============================================================================
 #     axes[0, 1].axis(False)
 #     axes[0, 1].imshow(x4[0, 0].cpu().detach())
@@ -326,4 +324,4 @@ def rand_bbox(size, lam):
 if __name__ == '__main__':
     model = create_nn_model()
     model = load_param(model)
-    training = training(model, ['train'])
+    training = training(model, ['val'])
