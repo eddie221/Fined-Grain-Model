@@ -2,6 +2,7 @@ import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
 import torch
+from neural_network.cofe import cofeature_fast
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
@@ -105,10 +106,20 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
-         
-        self.dropout = nn.Dropout(p = 0.5)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024, 0.5)
         
+        self.squeeze = nn.Conv2d(1024, 128, 1)
+        
+        self.replicationPad = nn.ReplicationPad2d(1)
+        self.sub_dim = 128
+        self.map_dim = self.sub_dim * self.sub_dim
+        self.cofe_kernel = 3
+        self.cofe_num = self.cofe_kernel * self.cofe_kernel - 4
+        self.cofe3 = cofeature_fast(self.cofe_kernel)
+
+        self.cofe_scale = self._construct_fc_layer([1], self.map_dim)
+        self.fc_cofe3 = self._construct_fc_layer([1024], self.cofe_num * self.map_dim)
+         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -116,6 +127,34 @@ class ResNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+            
+    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+        """
+        Construct fully connected layer
+
+        - fc_dims (list or tuple): dimensions of fc layers, if None,
+                                   no fc layers are constructed
+        - input_dim (int): input dimension
+        - dropout_p (float): dropout probability, if None, dropout is unused
+        """
+        if fc_dims is None:
+            self.feature_dim = input_dim
+            return None
+        
+        assert isinstance(fc_dims, (list, tuple)), "fc_dims must be either list or tuple, but got {}".format(type(fc_dims))
+        
+        layers = []
+        for dim in fc_dims:
+            layers.append(nn.Linear(input_dim, dim))
+            layers.append(nn.BatchNorm1d(dim))
+            layers.append(nn.ReLU(inplace=True))
+            if dropout_p is not None:
+                layers.append(nn.Dropout(p=dropout_p))
+            input_dim = dim
+        
+        self.feature_dim = fc_dims[-1]
+        
+        return nn.Sequential(*layers)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -143,15 +182,26 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        x3 = self.squeeze(x)
         x = self.layer4(x)
-        feature = x
         
+        x3 = self.replicationPad(x3)
+        cofe3 = self.cofe3(x3)
+        cofe3_scale = []
+        for idx in range(self.cofe_num):
+            scale = self.cofe_scale(cofe3[:,idx]) + 1
+            #cofe3_scale[:,idx] = cofe3[:,idx] * scale
+            cofe3_scale.append(cofe3[:,idx] * scale)
+        
+        cofe3_scale = torch.cat(cofe3_scale, dim=1)
+        cofe3 = self.fc_cofe3(cofe3_scale.view(cofe3_scale.size(0), -1))
+                              
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = self.dropout(x)
+        x = torch.cat([x, cofe3], dim = 1)
         x = self.fc(x)
 
-        return x, feature
+        return x
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
