@@ -106,19 +106,24 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024, 0.5)
+        self.fc = self._construct_fc_layer([2048, num_classes], 512 * block.expansion + 1024 + 1024, 0.5)
         
         self.squeeze = nn.Conv2d(1024, 128, 1)
         
-        self.replicationPad = nn.ReplicationPad2d(1)
-        self.sub_dim = 128
-        self.map_dim = self.sub_dim * self.sub_dim
-        self.cofe_kernel = 3
-        self.cofe_num = self.cofe_kernel * self.cofe_kernel - 4
-        self.cofe3 = cofeature_fast(self.cofe_kernel)
+        self.replicationPad1 = nn.ReplicationPad2d(1)
+        self.replicationPad2 = nn.ReplicationPad2d(2)
+        self.sub_dim3 = 128
+        self.map_dim3 = self.sub_dim3 * self.sub_dim3
+        self.cofe_kernel3 = 3
+        self.cofe_num3 = self.cofe_kernel3 * self.cofe_kernel3 - 4
+        self.cofe3_1 = cofeature_fast(self.cofe_kernel3)
+        self.sub_dim5 = 128
+        self.map_dim5 = self.sub_dim5 * self.sub_dim5
+        self.cofe_kernel5 = 5
+        self.cofe3_2 = cofeature_fast(self.cofe_kernel5)
 
-        self.cofe_scale = self._construct_fc_layer([1], self.map_dim)
-        self.fc_cofe3 = self._construct_fc_layer([1024], self.cofe_num * self.map_dim)
+        self.cofe_scale = self._construct_fc_layer([1], self.map_dim3)
+        self.fc_cofe3 = self._construct_fc_layer([1024], self.cofe_num3 * self.map_dim3)
          
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -185,20 +190,33 @@ class ResNet(nn.Module):
         x3 = self.squeeze(x)
         x = self.layer4(x)
         
-        x3 = self.replicationPad(x3)
-        cofe3 = self.cofe3(x3)
-        cofe3_scale = []
-        for idx in range(self.cofe_num):
-            scale = self.cofe_scale(cofe3[:,idx]) + 1
+        # distance 1
+        x3_1 = self.replicationPad1(x3)
+        cofe3_1 = self.cofe3_1(x3_1)
+        cofe3_scale1 = []
+        for idx in range(self.cofe_num3):
+            scale = self.cofe_scale(cofe3_1[:,idx]) + 1
             #cofe3_scale[:,idx] = cofe3[:,idx] * scale
-            cofe3_scale.append(cofe3[:,idx] * scale)
+            cofe3_scale1.append(cofe3_1[:,idx] * scale)
         
-        cofe3_scale = torch.cat(cofe3_scale, dim=1)
-        cofe3 = self.fc_cofe3(cofe3_scale.view(cofe3_scale.size(0), -1))
+        cofe3_scale1 = torch.cat(cofe3_scale1, dim=1)
+        cofe3_1 = self.fc_cofe3(cofe3_scale1.view(cofe3_scale1.size(0), -1))
+        
+        # distance 2
+        x3_2 = self.replicationPad2(x3)
+        cofe3_2 = self.cofe3_2(x3_2)
+        cofe3_scale2 = []
+        for idx in range(self.cofe_num3):
+            scale = self.cofe_scale(cofe3_2[:,idx]) + 1
+            #cofe3_scale[:,idx] = cofe3[:,idx] * scale
+            cofe3_scale2.append(cofe3_2[:,idx] * scale)
+        
+        cofe3_scale2 = torch.cat(cofe3_scale2, dim=1)
+        cofe3_2 = self.fc_cofe3(cofe3_scale2.view(cofe3_scale2.size(0), -1))
                               
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, cofe3], dim = 1)
+        x = torch.cat([x, cofe3_1, cofe3_2], dim = 1)
         x = self.fc(x)
 
         return x
