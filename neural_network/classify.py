@@ -106,25 +106,11 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([2048, num_classes], 512 * block.expansion + 1024 + 1024, 0.5)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
-        self.squeeze = nn.Conv2d(1024, 128, 1)
+        self.squeeze4 = nn.Conv2d(2048, 256, 1)
+        self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
         
-        self.replicationPad1 = nn.ReplicationPad2d(1)
-        self.replicationPad2 = nn.ReplicationPad2d(2)
-        self.sub_dim3 = 128
-        self.map_dim3 = self.sub_dim3 * self.sub_dim3
-        self.cofe_kernel3 = 3
-        self.cofe_num3 = self.cofe_kernel3 * self.cofe_kernel3 - 4
-        self.cofe3_1 = cofeature_fast(self.cofe_kernel3)
-        self.sub_dim5 = 128
-        self.map_dim5 = self.sub_dim5 * self.sub_dim5
-        self.cofe_kernel5 = 5
-        self.cofe3_2 = cofeature_fast(self.cofe_kernel5)
-
-        self.cofe_scale = self._construct_fc_layer([1], self.map_dim3)
-        self.fc_cofe3 = self._construct_fc_layer([1024], self.cofe_num3 * self.map_dim3)
-         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -178,6 +164,15 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
     
+    def channel_correlation(self, x):
+        b, c, h, w = x.shape
+        x_flatten = x.view(b, c, -1)
+        cha_cor = self.relu(torch.bmm(x_flatten, x_flatten.permute(0, 2, 1)))
+        cha_cor_max, max_index = torch.max(cha_cor, dim = 1, keepdim = True)
+        cha_cor_min, max_index = torch.min(cha_cor, dim = 1, keepdim = True)
+        cha_cor = (cha_cor - cha_cor_min) / (cha_cor_max - cha_cor_min)
+        return cha_cor
+    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -187,36 +182,13 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x3 = self.squeeze(x)
         x = self.layer4(x)
+        x4_cha_cor = self.channel_correlation(self.squeeze4(x)).view(x.shape[0], -1)
+        x4_cha_cor = self.fc_4(x4_cha_cor)
         
-        # distance 1
-        x3_1 = self.replicationPad1(x3)
-        cofe3_1 = self.cofe3_1(x3_1)
-        cofe3_scale1 = []
-        for idx in range(self.cofe_num3):
-            scale = self.cofe_scale(cofe3_1[:,idx]) + 1
-            #cofe3_scale[:,idx] = cofe3[:,idx] * scale
-            cofe3_scale1.append(cofe3_1[:,idx] * scale)
-        
-        cofe3_scale1 = torch.cat(cofe3_scale1, dim=1)
-        cofe3_1 = self.fc_cofe3(cofe3_scale1.view(cofe3_scale1.size(0), -1))
-        
-        # distance 2
-        x3_2 = self.replicationPad2(x3)
-        cofe3_2 = self.cofe3_2(x3_2)
-        cofe3_scale2 = []
-        for idx in range(self.cofe_num3):
-            scale = self.cofe_scale(cofe3_2[:,idx]) + 1
-            #cofe3_scale[:,idx] = cofe3[:,idx] * scale
-            cofe3_scale2.append(cofe3_2[:,idx] * scale)
-        
-        cofe3_scale2 = torch.cat(cofe3_scale2, dim=1)
-        cofe3_2 = self.fc_cofe3(cofe3_scale2.view(cofe3_scale2.size(0), -1))
-                              
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, cofe3_1, cofe3_2], dim = 1)
+        x = torch.cat([x, x4_cha_cor], dim = 1)
         x = self.fc(x)
 
         return x

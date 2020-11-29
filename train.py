@@ -188,7 +188,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
 
     er_loss = torch.mean(torch.abs(cam_1.view(cam_1.shape[0], -1) - cam_rf_1.view(cam_rf_1.shape[0], -1)))
 
-    loss = cls_loss + er_loss / 2
+    loss = cls_loss + er_loss
     
     if phase == 'train':
         loss.backward()
