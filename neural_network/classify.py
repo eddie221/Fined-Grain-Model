@@ -107,6 +107,7 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
+        self.fc_each_cha = self._construct_fc_layer([num_classes], 14 * 14, cha = 2048)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
@@ -119,7 +120,7 @@ class ResNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             
-    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+    def _construct_fc_layer(self, fc_dims, input_dim, cha = None, dropout_p=None):
         """
         Construct fully connected layer
 
@@ -137,7 +138,10 @@ class ResNet(nn.Module):
         layers = []
         for dim in fc_dims:
             layers.append(nn.Linear(input_dim, dim))
-            layers.append(nn.BatchNorm1d(dim))
+            if cha is not None:
+                layers.append(nn.BatchNorm1d(2048))
+            else:
+                layers.append(nn.BatchNorm1d(dim))
             layers.append(nn.ReLU(inplace=True))
             if dropout_p is not None:
                 layers.append(nn.Dropout(p=dropout_p))
@@ -183,15 +187,19 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+        
         x4_cha_cor = self.channel_correlation(self.squeeze4(x)).view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
         
+        x_cha = x.view(x.shape[0], x.shape[1], -1)
+        x_cha = self.fc_each_cha(x_cha)
+
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = torch.cat([x, x4_cha_cor], dim = 1)
         x = self.fc(x)
 
-        return x
+        return x, x_cha
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.

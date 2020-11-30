@@ -91,7 +91,7 @@ class Model_Net(nn.Module):
             mask_x = x * mask
         
         # classify model ------------------------------------------------------
-        result_2 = self.backbone2(mask_x.detach())
+        result_2, result_cha_2 = self.backbone2(mask_x.detach())
         
         
-        return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, cam_rf_1
+        return [result_1, x4_cls, x34_cls, x234_cls], result_2, result_cha_2, cam_1, cam_rf_1

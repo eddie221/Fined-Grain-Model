@@ -161,6 +161,11 @@ def load_param(model):
             
     return model
 
+def deter_class(result):
+    class_result = torch.zeros([result.shape[0], NUM_CLASS]).scatter_add(1, result, torch.ones(result.shape))
+    r, predicted = torch.max(torch.tensor([[1,1,0,2,3,3]]), 1)
+    return class_result
+
 def train_step(model, data, label, loss_func, optimizers, phase):
     if use_gpu:
         b_data = data.to(DEVICE)
@@ -172,7 +177,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     
-    output_1, output_2, cam_1, cam_rf_1 = model(b_data)
+    output_1, output_2, output_cha_2, cam_1, cam_rf_1 = model(b_data)
+    _, predicted_2 = torch.max(output_cha_2.data, 2)
+    output_cha_2 = torch.sum(output_cha_2, dim = 1)
+    print(output_cha_2.shape)
 # =============================================================================
 #     fig, axes = plt.subplots(3,2)
 #     fig.suptitle("label : {}".format(label[0]), fontsize=16)
