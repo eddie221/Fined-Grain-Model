@@ -106,11 +106,11 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
+        #self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         self.fc_each_cha = self._construct_fc_layer([num_classes], 14 * 14, cha = 2048)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
-        self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
+        self.fc_4 = self._construct_fc_layer([num_classes], 256 * 256)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -193,13 +193,9 @@ class ResNet(nn.Module):
         
         x_cha = x.view(x.shape[0], x.shape[1], -1)
         x_cha = self.fc_each_cha(x_cha)
+        x_all = torch.cat([x_cha, x4_cha_cor.unsqueeze(1)], dim = 1)
 
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = torch.cat([x, x4_cha_cor], dim = 1)
-        x = self.fc(x)
-
-        return x, x_cha
+        return x_all
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
