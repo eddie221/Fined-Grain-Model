@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch
 
 class Model_Net(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, top_n = 3):
         super(Model_Net, self).__init__()
         self.backbone1 = resnet50_mask(num_classes = num_classes)
         self.backbone2 = resnet50_classify(num_classes = num_classes)
@@ -19,6 +19,7 @@ class Model_Net(nn.Module):
         self.instance_norm_3 = nn.InstanceNorm2d(1)
         self.instance_norm_4 = nn.InstanceNorm2d(1)
         self.relu = nn.ReLU()
+        self.top_n = top_n
     
     def feature_refined(self, cam):
         n, c, h, w = cam.shape
@@ -47,13 +48,19 @@ class Model_Net(nn.Module):
             feature_rf = self.feature_refined(feature)
             
             # create cam
-            cam = feature * channel_weight.unsqueeze(2).unsqueeze(3)
-            cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
-            
+            cam = feature * channel_weight[:, 0].unsqueeze(2).unsqueeze(3)
             # refine feature
-            cam_rf = feature_rf * channel_weight.unsqueeze(2).unsqueeze(3)
-            cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
-        
+            cam_rf = feature_rf * channel_weight[:, 0].unsqueeze(2).unsqueeze(3)
+            
+            for i in range(1, self.top_n):
+                # create cam
+                cam = feature * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam
+                
+                # refine feature
+                cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam_rf
+
+        cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
+        cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
         if feature.size(2) == size // 8:
             cam = self.instance_norm_2(cam)
             cam_rf = self.instance_norm_2(cam_rf)
@@ -78,11 +85,12 @@ class Model_Net(nn.Module):
         result_1, x4_cls, x34_cls, x234_cls, x4, x34, x234 = self.backbone1(x)
 
         # get weight
-        predict_class = torch.max(result_1, dim = 1)[1]
+        _, class_sort = torch.sort(result_1, dim = 1, descending = True)
+        class_sort = class_sort[:,:self.top_n]
         with torch.no_grad():
-            cam_1_4, cam_rf_1_4 = self.create_cam(x4, self.backbone1.state_dict()['fc_4.weight'][predict_class], x.shape[2])
-            cam_1_34, cam_rf_1_34 = self.create_cam(x34, self.backbone1.state_dict()['fc_34.weight'][predict_class], x.shape[2])
-            cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.weight'][predict_class], x.shape[2])
+            cam_1_4, cam_rf_1_4 = self.create_cam(x4, self.backbone1.state_dict()['fc_4.weight'][class_sort], x.shape[2])
+            cam_1_34, cam_rf_1_34 = self.create_cam(x34, self.backbone1.state_dict()['fc_34.weight'][class_sort], x.shape[2])
+            cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.weight'][class_sort], x.shape[2])
             
             cam_1 = (cam_1_4 + cam_1_34 + cam_1_234) / 3
             cam_rf_1 = (cam_rf_1_4 + cam_rf_1_34 + cam_rf_1_234) / 3

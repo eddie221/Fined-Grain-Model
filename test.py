@@ -177,10 +177,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     
-    output_1, output_2, output_cha_2, cam_1, cam_rf_1 = model(b_data)
-    _, predicted_2 = torch.max(output_cha_2.data, 2)
-    output_cha_2 = torch.sum(output_cha_2, dim = 1)
-    print(output_cha_2.shape)
+    output_1, output_2, cam_1, cam_rf_1 = model(b_data)
 # =============================================================================
 #     fig, axes = plt.subplots(3,2)
 #     fig.suptitle("label : {}".format(label[0]), fontsize=16)
