@@ -97,9 +97,10 @@ class Model_Net(nn.Module):
             
             mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
             mask_x = x * mask
+            mask_x_re = x * (1 - mask)
         
         # classify model ------------------------------------------------------
-        result_2 = self.backbone2(mask_x.detach())
+        result_2 = self.backbone2(mask_x.detach(), mask_x_re.detach())
         
         
         return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, cam_rf_1
