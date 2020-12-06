@@ -58,20 +58,21 @@ class Model_Net(nn.Module):
                 
                 # refine feature
                 cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam_rf
+                
+                if feature.size(2) == size // 8:
+                    cam = self.instance_norm_2(cam)
+                    cam_rf = self.instance_norm_2(cam_rf)
+                    
+                elif feature.size(2) == size // 16:
+                    cam = self.instance_norm_3(cam)
+                    cam_rf = self.instance_norm_3(cam_rf)
+                    
+                elif feature.size(2) == size // 32:
+                    cam = self.instance_norm_4(cam)
+                    cam_rf = self.instance_norm_4(cam_rf)
 
         cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
         cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
-        if feature.size(2) == size // 8:
-            cam = self.instance_norm_2(cam)
-            cam_rf = self.instance_norm_2(cam_rf)
-            
-        elif feature.size(2) == size // 16:
-            cam = self.instance_norm_3(cam)
-            cam_rf = self.instance_norm_3(cam_rf)
-            
-        elif feature.size(2) == size // 32:
-            cam = self.instance_norm_4(cam)
-            cam_rf = self.instance_norm_4(cam_rf)
             
         return cam, cam_rf
 
@@ -97,10 +98,9 @@ class Model_Net(nn.Module):
             
             mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
             mask_x = x * mask
-            mask_x_re = x * (1 - mask)
         
         # classify model ------------------------------------------------------
-        result_2 = self.backbone2(mask_x.detach(), mask_x_re.detach())
+        result_2 = self.backbone2(mask_x.detach())
         
         
         return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, cam_rf_1

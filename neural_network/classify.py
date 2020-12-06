@@ -106,7 +106,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
@@ -172,8 +172,8 @@ class ResNet(nn.Module):
         cha_cor_min, max_index = torch.min(cha_cor, dim = 1, keepdim = True)
         cha_cor = (cha_cor - cha_cor_min) / (cha_cor_max - cha_cor_min)
         return cha_cor
-
-    def f_extractor(self, x):
+    
+    def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -185,15 +185,10 @@ class ResNet(nn.Module):
         x = self.layer4(x)
         x4_cha_cor = self.channel_correlation(self.squeeze4(x)).view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
-        return x, x4_cha_cor
-    
-    def forward(self, x, x_rv):
-        x, x4_cha_cor = self.f_extractor(x)
-        x_rv, x4_cha_cor_rv = self.f_extractor(x_rv)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x4_cha_cor, x4_cha_cor_rv], dim = 1)
+        x = torch.cat([x, x4_cha_cor], dim = 1)
         x = self.fc(x)
 
         return x

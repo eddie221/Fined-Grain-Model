@@ -75,7 +75,7 @@ data_transforms = {
         'train': transforms.Compose([
             transforms.Resize((600, 600), Image.BILINEAR),
             transforms.RandomCrop(IMAGE_SIZE),
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             
@@ -98,7 +98,7 @@ def load_data():
     image_dataloader = {x : torch.utils.data.DataLoader(image_datasets[x],
                                                         batch_size=1,
                                                         #sampler = data_sampler[x],
-                                                        shuffle=True,
+                                                        shuffle=False,
                                                         num_workers=16)
                         for x in ['train', 'val']}
     
@@ -119,7 +119,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = model_net.Model_Net(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.Model_Net(num_classes = NUM_CLASS, top_n = 3).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -141,7 +141,7 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
-    params = torch.load("./pkl/cofe_resnet_20201124-1.pkl")['model_param']
+    params = torch.load("./pkl/cofe_resnet_20201202-1.pkl")['model_param']
     for name, param in params.items():
         if name in model.state_dict():
             try:
@@ -178,22 +178,22 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         optimizer.zero_grad() 
     
     output_1, output_2, cam_1, cam_rf_1 = model(b_data)
+    fig, axes = plt.subplots(3,2)
+    fig.suptitle("label : {}".format(label[0]), fontsize=16)
+    axes[0, 0].set_title("Class Activation Map")
+    axes[0, 0].imshow(data[0].permute(1, 2, 0))
+    axes[1, 0].imshow(cam_1.detach().cpu()[0][0])
+    axes[2, 0].imshow(cam_rf_1.detach().cpu()[0][0])
+    
+    mask = torch.where(cam_1.cpu() > 0.5, torch.tensor(1.), torch.tensor(0.))
+        
+    mask = torch.nn.functional.interpolate(mask, size = data.shape[2], mode = 'bilinear', align_corners = True)
+    
+    mask_x = mask * data
+    
+    axes[0, 1].set_title("Refined Class Activation Map")
+    axes[0, 1].imshow(mask_x[0].permute(1, 2, 0))
 # =============================================================================
-#     fig, axes = plt.subplots(3,2)
-#     fig.suptitle("label : {}".format(label[0]), fontsize=16)
-#     axes[0, 0].set_title("Class Activation Map")
-#     axes[0, 0].imshow(data[0].permute(1, 2, 0))
-#     axes[1, 0].imshow(cam_1.detach().cpu()[0][0])
-#     axes[2, 0].imshow(cam_rf_1.detach().cpu()[0][0])
-#     
-#     mask = torch.where(cam_1.cpu() > 0.5, torch.tensor(1.), torch.tensor(0.))
-#         
-#     mask = torch.nn.functional.interpolate(mask, size = data.shape[2], mode = 'bilinear', align_corners = True)
-#     
-#     mask_x = mask * data
-#     
-#     axes[0, 1].set_title("Refined Class Activation Map")
-#     axes[0, 1].imshow(mask_x[0].permute(1, 2, 0))
 #     axes[1, 1].imshow(cam_2.detach().cpu()[0][0])
 #     axes[2, 1].imshow(cam_rf_2.detach().cpu()[0][0])
 # =============================================================================
@@ -330,5 +330,5 @@ def rand_bbox(size, lam):
 
 if __name__ == '__main__':
     model = create_nn_model()
-    #model = load_param(model)
-    training = training(model, ['val'])
+    model = load_param(model)
+    training = training(model, ['train'])
