@@ -141,7 +141,7 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
-    params = torch.load("./pkl/cofe_resnet_20201202-1.pkl")['model_param']
+    params = torch.load("./pkl/cofe_resnet_20201206-1.pkl")['model_param']
     for name, param in params.items():
         if name in model.state_dict():
             try:
@@ -331,4 +331,4 @@ def rand_bbox(size, lam):
 if __name__ == '__main__':
     model = create_nn_model()
     model = load_param(model)
-    training = training(model, ['train'])
+    training = training(model, ['val'])
