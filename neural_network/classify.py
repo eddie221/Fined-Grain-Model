@@ -111,6 +111,7 @@ class ResNet(nn.Module):
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
+        self.gnn = Graph_nn(256, 3)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -185,6 +186,7 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         x4_cha_cor = self.channel_correlation(self.squeeze4(x))
+        x4_cha_cor = self.gnn(x4_cha_cor)
         x4_cha_cor = x4_cha_cor.view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
 
