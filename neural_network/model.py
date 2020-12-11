@@ -44,12 +44,12 @@ class Model_Net(nn.Module):
 # =============================================================================
 
     def create_cam(self, feature, channel_weight, size):
-        feature_rf = self.feature_refined(feature)
+        #feature_rf = self.feature_refined(feature)
         
         # create cam
         cam = feature * channel_weight[:, 0].unsqueeze(2).unsqueeze(3)
         # refine feature
-        cam_rf = feature_rf * channel_weight[:, 0].unsqueeze(2).unsqueeze(3)
+        #cam_rf = feature_rf * channel_weight[:, 0].unsqueeze(2).unsqueeze(3)
         
         for i in range(1, self.top_n):
             with torch.no_grad():
@@ -57,24 +57,24 @@ class Model_Net(nn.Module):
                 cam = feature * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam
                 
                 # refine feature
-                cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam_rf
+                #cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam_rf
             
             if feature.size(2) == size // 8:
                 cam = self.instance_norm_2(cam)
-                cam_rf = self.instance_norm_2(cam_rf)
+                #cam_rf = self.instance_norm_2(cam_rf)
                 
             elif feature.size(2) == size // 16:
                 cam = self.instance_norm_3(cam)
-                cam_rf = self.instance_norm_3(cam_rf)
+                #cam_rf = self.instance_norm_3(cam_rf)
                 
             elif feature.size(2) == size // 32:
                 cam = self.instance_norm_4(cam)
-                cam_rf = self.instance_norm_4(cam_rf)
+                #cam_rf = self.instance_norm_4(cam_rf)
 
         cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
-        cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
+        #cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
             
-        return cam, cam_rf
+        return cam#, cam_rf
 
     def forward(self, x):
         if x.get_device() == -1:
@@ -94,7 +94,7 @@ class Model_Net(nn.Module):
             cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.weight'][class_sort], x.shape[2])
             
             cam_1 = (cam_1_4 + cam_1_34 + cam_1_234) / 3
-            cam_rf_1 = (cam_rf_1_4 + cam_rf_1_34 + cam_rf_1_234) / 3
+            #cam_rf_1 = (cam_rf_1_4 + cam_rf_1_34 + cam_rf_1_234) / 3
             
             mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
             mask_x = x * mask
@@ -103,4 +103,4 @@ class Model_Net(nn.Module):
         result_2 = self.backbone2(mask_x.detach())
         
         
-        return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, cam_rf_1
+        return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1#, cam_rf_1
