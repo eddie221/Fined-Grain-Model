@@ -54,22 +54,22 @@ class Model_Net(nn.Module):
         for i in range(1, self.top_n):
             with torch.no_grad():
                 # create cam
-                cam = feature * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam
+                tmp_cam = feature * channel_weight[:, i].unsqueeze(2).unsqueeze(3)
                 
                 # refine feature
-                cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3) + cam_rf
+                tmp_cam_rf = feature_rf * channel_weight[:, i].unsqueeze(2).unsqueeze(3)
             
             if feature.size(2) == size // 8:
-                cam = self.instance_norm_2(cam)
-                cam_rf = self.instance_norm_2(cam_rf)
+                cam = self.instance_norm_2(tmp_cam) + cam
+                cam_rf = self.instance_norm_2(tmp_cam_rf) + cam_rf
                 
             elif feature.size(2) == size // 16:
-                cam = self.instance_norm_3(cam)
-                cam_rf = self.instance_norm_3(cam_rf)
+                cam = self.instance_norm_3(tmp_cam) + cam
+                cam_rf = self.instance_norm_3(tmp_cam_rf) + cam_rf
                 
             elif feature.size(2) == size // 32:
-                cam = self.instance_norm_4(cam)
-                cam_rf = self.instance_norm_4(cam_rf)
+                cam = self.instance_norm_4(tmp_cam) + cam
+                cam_rf = self.instance_norm_4(tmp_cam_rf) + cam_rf
 
         cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
         cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)

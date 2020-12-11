@@ -118,7 +118,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = model_net.Model_Net(num_classes = NUM_CLASS, top_n = 1).to(DEVICE)
+    model = model_net.Model_Net(num_classes = NUM_CLASS, top_n = 3).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
