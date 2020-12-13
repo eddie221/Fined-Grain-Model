@@ -16,7 +16,7 @@ import random
 from PIL import Image
 import numpy as np
 import time
-from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX
+from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, CON_MATRIX
 #from torch.utils.tensorboard import SummaryWriter
 
 #print environment information

@@ -24,7 +24,7 @@ class Model_Net(nn.Module):
     def feature_refined(self, cam):
         n, c, h, w = cam.shape
         cam = cam.view(n, -1, h * w)
-        cam = cam / (torch.norm(cam, dim=1, keepdim = True) + 1e-5)
+        cam = cam / (torch.norm(cam, dim = 1, keepdim = True) + 1e-5)
         
         correlation = self.relu(torch.matmul(cam.transpose(1, 2), cam))
         correlation = correlation / (torch.sum(correlation, dim = 1, keepdim = True) + 1e-5)

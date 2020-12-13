@@ -107,12 +107,15 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 + 1024)
         
+        self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
+        self.fc_3 = self._construct_fc_layer([1024], 128 * 128)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
         
-        self.gnn = Graph_nn(256, 3)
+        self.gnn3 = Graph_nn(128, 3)
+        self.gnn4 = Graph_nn(256, 3)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -185,15 +188,20 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        x3_cha_cor = self.channel_correlation(self.squeeze3(x))
+        x3_cha_cor = self.gnn3(x3_cha_cor)
+        x3_cha_cor = x3_cha_cor.view(x.shape[0], -1)
+        x3_cha_cor = self.fc_3(x3_cha_cor)
+        
         x = self.layer4(x)
         x4_cha_cor = self.channel_correlation(self.squeeze4(x))
-        x4_cha_cor = self.gnn(x4_cha_cor)
+        x4_cha_cor = self.gnn4(x4_cha_cor)
         x4_cha_cor = x4_cha_cor.view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x4_cha_cor], dim = 1)
+        x = torch.cat([x, x4_cha_cor, x3_cha_cor], dim = 1)
         x = self.fc(x)
 
         return x
