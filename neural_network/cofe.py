@@ -13,13 +13,20 @@ kernel_sample = {3 : [0, 1, 2, 3, 4],
                  5 : [0, 2, 4, 10, 12]}
 
 class cofeature_fast(nn.Module):
-    def __init__(self, kernel_size = 3, stride = 1, dilate = 1):
+    def __init__(self, kernel_size = 3, stride = 1, dilate = 1, pad = 'reflect'):
         super(cofeature_fast, self).__init__()
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
-
+        
+        if pad == 'reflect':
+            self.pad = nn.ReplicationPad2d(kernel_size // 2)
+        
     def forward(self, x, y = None):
+        x = self.pad(x)
+        if y is not None:
+            y = self.pad(y)
+            
         batch, channel, height, width = x.size()
 
         center_idxs = [[],[]]
@@ -40,14 +47,15 @@ class cofeature_fast(nn.Module):
         for y_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
             for x_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
                 #if (y_idx + self.kernel_size//2) * self.kernel_size + x_idx + self.kernel_size//2 <= self.kernel_size * self.kernel_size // 2:
-                if (y_idx + self.kernel_size//2) * self.kernel_size + x_idx + self.kernel_size//2 in [0,2,4,6,7,8,10,11,12]:
+                if (y_idx + self.kernel_size//2) * self.kernel_size + x_idx + self.kernel_size//2 in kernel_sample[self.kernel_size]:
                     if y is not None:
                         side_vector = y[:,:,center_idxs[0]+y_idx, center_idxs[1]+x_idx]
                     else:
                         side_vector = x[:,:,center_idxs[0]+y_idx, center_idxs[1]+x_idx]
+                        
                     side_vector = side_vector.transpose(1,2)
+                    
                     side_vector = side_vector.contiguous().view(-1, 1, channel)
-    
                     cofeature = torch.bmm(center_vector, side_vector)
                     cofeature = cofeature.view(batch, kernel_count, -1)
     
@@ -58,3 +66,9 @@ class cofeature_fast(nn.Module):
         cofe = cofe.transpose(0,1)
         cofe = nn.functional.normalize(cofe, dim=-1)
         return cofe
+    
+if __name__ == '__main__':
+    c = cofeature_fast()
+    a = torch.randn([1, 5, 5, 5])
+    c(a)
+    

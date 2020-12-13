@@ -4,6 +4,7 @@ import torch.utils.model_zoo as model_zoo
 import torch
 from neural_network.cofe import cofeature_fast
 from neural_network.graph_nn import Graph_nn
+from neural_network.cofe import cofeature_fast
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
@@ -107,12 +108,18 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 + 1024)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
+        self.cofe = cofeature_fast()
+        self.cofe_squeeze = nn.Conv1d(5, 1, 1)
+        self.cofe_fc_3 = self._construct_fc_layer([1024], 128 * 128)
+        self.cofe_fc_4 = self._construct_fc_layer([1024], 256 * 256)
         self.fc_3 = self._construct_fc_layer([1024], 128 * 128)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
+        self.fuse_3 = self._construct_fc_layer([1024], 2048)
+        self.fuse_4 = self._construct_fc_layer([1024], 2048)
         
         self.gnn3 = Graph_nn(128, 3)
         self.gnn4 = Graph_nn(256, 3)
@@ -192,16 +199,25 @@ class ResNet(nn.Module):
         x3_cha_cor = self.gnn3(x3_cha_cor)
         x3_cha_cor = x3_cha_cor.view(x.shape[0], -1)
         x3_cha_cor = self.fc_3(x3_cha_cor)
+        cofe3 = self.cofe_squeeze(self.cofe(self.squeeze3(x)))
+        cofe3 = cofe3.view(x.shape[0], -1)
+        cofe_3 = self.cofe_fc_3(cofe3)
         
         x = self.layer4(x)
         x4_cha_cor = self.channel_correlation(self.squeeze4(x))
         x4_cha_cor = self.gnn4(x4_cha_cor)
         x4_cha_cor = x4_cha_cor.view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
+        cofe4 = self.cofe_squeeze(self.cofe(self.squeeze4(x)))
+        cofe4 = cofe4.view(x.shape[0], -1)
+        cofe_4 = self.cofe_fc_4(cofe4)
+
+        fuse_f_3 = self.fuse_3(torch.cat([cofe_3, x3_cha_cor], dim = 1))        
+        fuse_f_4 = self.fuse_4(torch.cat([cofe_4, x4_cha_cor], dim = 1))
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x4_cha_cor, x3_cha_cor], dim = 1)
+        x = torch.cat([x, fuse_f_3, fuse_f_4], dim = 1)
         x = self.fc(x)
 
         return x
