@@ -111,6 +111,7 @@ class ResNet(nn.Module):
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
+        
         self.gnn = Graph_nn(256, 3)
         
         for m in self.modules():
