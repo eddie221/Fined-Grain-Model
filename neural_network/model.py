@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch
 
 class Model_Net(nn.Module):
-    def __init__(self, num_classes, top_n = 3):
+    def __init__(self, num_classes, top_n = 1):
         super(Model_Net, self).__init__()
         self.backbone1 = resnet50_mask(num_classes = num_classes)
         self.backbone2 = resnet50_classify(num_classes = num_classes)
@@ -24,7 +24,7 @@ class Model_Net(nn.Module):
     def feature_refined(self, cam):
         n, c, h, w = cam.shape
         cam = cam.view(n, -1, h * w)
-        cam = cam / (torch.norm(cam, dim = 1, keepdim = True) + 1e-5)
+        cam = cam / (torch.norm(cam, dim=1, keepdim = True) + 1e-5)
         
         correlation = self.relu(torch.matmul(cam.transpose(1, 2), cam))
         correlation = correlation / (torch.sum(correlation, dim = 1, keepdim = True) + 1e-5)
@@ -70,12 +70,12 @@ class Model_Net(nn.Module):
             elif feature.size(2) == size // 32:
                 cam = self.instance_norm_4(cam)
                 cam_rf = self.instance_norm_4(cam_rf)
-
+        
         cam = nn.functional.interpolate(torch.sum(cam, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
         cam_rf = nn.functional.interpolate(torch.sum(cam_rf, dim = 1, keepdim = True), size = size, mode = 'bilinear', align_corners = True)
             
         return cam, cam_rf
-
+            
     def forward(self, x):
         if x.get_device() == -1:
             device = 'cpu'
@@ -88,7 +88,9 @@ class Model_Net(nn.Module):
         # get weight
         _, class_sort = torch.sort(result_1, dim = 1, descending = True)
         class_sort = class_sort[:,:self.top_n]
+        
         with torch.no_grad():
+            #print(self.backbone1.state_dict()['fc_4.weight'][class_sort])
             cam_1_4, cam_rf_1_4 = self.create_cam(x4, self.backbone1.state_dict()['fc_4.weight'][class_sort], x.shape[2])
             cam_1_34, cam_rf_1_34 = self.create_cam(x34, self.backbone1.state_dict()['fc_34.weight'][class_sort], x.shape[2])
             cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.weight'][class_sort], x.shape[2])

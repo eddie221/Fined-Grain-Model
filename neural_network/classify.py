@@ -3,8 +3,6 @@ import math
 import torch.utils.model_zoo as model_zoo
 import torch
 from neural_network.cofe import cofeature_fast
-from neural_network.graph_nn import Graph_nn
-from neural_network.cofe import cofeature_fast
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
@@ -111,14 +109,7 @@ class ResNet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
-        self.cofe = cofeature_fast()
-        self.cofe_squeeze = nn.Conv1d(5, 1, 1)
-        self.cofe_fc_4 = self._construct_fc_layer([1024], 256 * 256)
         self.fc_4 = self._construct_fc_layer([1024], 256 * 256)
-        self.fc_gnn_4 = self._construct_fc_layer([1024], 256 * 14 * 14)
-        self.fuse_4 = self._construct_fc_layer([1024], 1024 * 3)
-        
-        self.gnn4 = Graph_nn(256, 3)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -191,24 +182,13 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        
         x = self.layer4(x)
-        x4_squeeze = self.squeeze4(x)
-        x4_cha_cor = self.channel_correlation(x4_squeeze)
-        x4_gnn = self.gnn4(x4_squeeze)
-        x4_cha_cor = x4_cha_cor.view(x.shape[0], -1)
-        x4_gnn = x4_gnn.view(x.shape[0], -1)
+        x4_cha_cor = self.channel_correlation(self.squeeze4(x)).view(x.shape[0], -1)
         x4_cha_cor = self.fc_4(x4_cha_cor)
-        x4_gnn = self.fc_gnn_4(x4_gnn)
-        cofe4 = self.cofe_squeeze(self.cofe(x4_squeeze))
-        cofe4 = cofe4.view(x.shape[0], -1)
-        cofe_4 = self.cofe_fc_4(cofe4)
-
-        fuse_f_4 = self.fuse_4(torch.cat([cofe_4, x4_cha_cor, x4_gnn], dim = 1))
-
+        
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, fuse_f_4], dim = 1)
+        x = torch.cat([x, x4_cha_cor], dim = 1)
         x = self.fc(x)
 
         return x
