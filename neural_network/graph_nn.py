@@ -12,7 +12,7 @@ import torch
 class Graph_nn(nn.Module):
     def __init__(self, cha, layer = 1):
         super(Graph_nn, self).__init__()
-        self.param = nn.Parameter(torch.randn([layer, cha, cha, 1])).cuda()
+        self.param = nn.Parameter(torch.randn([layer, cha, cha, 1]))
         self.layer = layer
         self.instance_norm = nn.InstanceNorm1d(cha)
         self.relu = nn.ReLU()
@@ -34,3 +34,8 @@ class Graph_nn(nn.Module):
         
         #x = torch.sum(x, dim = 1)
         return x
+    
+if __name__ == "__main__":
+    gnn = Graph_nn(128, 3)
+    a = torch.randn([1, 128, 128])
+    print(gnn(a).shape)    
