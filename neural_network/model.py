@@ -20,6 +20,7 @@ class Model_Net(nn.Module):
         self.instance_norm_4 = nn.InstanceNorm2d(1)
         self.relu = nn.ReLU()
         self.top_n = top_n
+        self.softmax2d = nn.Softmax2d()
     
     def feature_refined(self, cam):
         n, c, h, w = cam.shape
@@ -97,6 +98,9 @@ class Model_Net(nn.Module):
             
             cam_1 = (cam_1_4 + cam_1_34 + cam_1_234) / 3
             cam_rf_1 = (cam_rf_1_4 + cam_rf_1_34 + cam_rf_1_234) / 3
+            
+            cam_1 = self.softmax2d(cam_1)
+            cam_rf_1 = self.softmax2d(cam_rf_1)
             
             mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
             mask_x = x * mask
