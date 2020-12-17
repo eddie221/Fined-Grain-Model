@@ -124,7 +124,7 @@ class ResNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-                
+            
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
         """
         Construct fully connected layer
