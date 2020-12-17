@@ -133,28 +133,44 @@ def create_opt_loss(model, bal_var):
     set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 100, 150], gamma=0.1),
                         ]
     
-    loss_func = [torch.nn.CrossEntropyLoss()]
+    loss_func = [torch.nn.CrossEntropyLoss(),
+                 torch.nn.BCEWithLogitsLoss()]
     optimizer_select = 'Adam'
     loss_function_select = 'crossentropy'
     return optimizer, set_lr_secheduler, loss_func
 
 def load_param(model):
     # load resnet
+    load = []
+    not_load = []
     params = torch.load("../COFENet/pkl/resnet50.pth")
     for name, param in params.items():
         if name in model.backbone1.state_dict():
             try:
                 model.backbone1.state_dict()[name].copy_(param)
-                print(name)
+                load.append(name)
             except:
-                print("{} can not load.".format(name))
+                not_load.append(name)
+        else:
+            print(name)
                 
+    print("Load {} layers".format(len(load)))
+    print("Not load {} layers".format(len(not_load)))
+    load = []
+    not_load = []
+    params = torch.load("../COFENet/pkl/resnet50.pth")
+    for name, param in params.items():
         if name in model.backbone2.state_dict():
             try:
                 model.backbone2.state_dict()[name].copy_(param)
-                print(name)
+                load.append(name)
             except:
-                print("{} can not load.".format(name))
+                not_load.append(name)
+        else:
+            print(name)
+            
+    print("Load {} layers".format(len(load)))
+    print("Not load {} layers".format(len(not_load)))
 # =============================================================================
 #         if name in model.backbone2.state_dict():
 #             try:
@@ -186,9 +202,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         cls_loss = cls_loss + loss_func[0](output_1[i], b_label)
     cls_loss = cls_loss + loss_func[0](output_2, b_label)
 
-    er_loss = torch.mean(torch.abs(cam_1.view(cam_1.shape[0], -1) - cam_rf_1.view(cam_rf_1.shape[0], -1)))
-
-    loss = cls_loss + er_loss
+    #er_loss = torch.mean(torch.abs(cam_1.view(cam_1.shape[0], -1) - cam_rf_1.view(cam_rf_1.shape[0], -1)))
+    er_loss = loss_func[1](cam_1, cam_rf_1)
+    
+    loss = cls_loss + er_loss * 0.1
     
     if phase == 'train':
         loss.backward()

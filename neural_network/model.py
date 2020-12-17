@@ -92,21 +92,19 @@ class Model_Net(nn.Module):
         
         with torch.no_grad():
             #print(self.backbone1.state_dict()['fc_4.weight'][class_sort])
-            cam_1_4, cam_rf_1_4 = self.create_cam(x4, self.backbone1.state_dict()['fc_4.weight'][class_sort], x.shape[2])
-            cam_1_34, cam_rf_1_34 = self.create_cam(x34, self.backbone1.state_dict()['fc_34.weight'][class_sort], x.shape[2])
-            cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.weight'][class_sort], x.shape[2])
+            cam_1_4, cam_rf_1_4 = self.create_cam(x4, self.backbone1.state_dict()['fc_4.0.weight'][class_sort], x.shape[2])
+            cam_1_34, cam_rf_1_34 = self.create_cam(x34, self.backbone1.state_dict()['fc_34.0.weight'][class_sort], x.shape[2])
+            cam_1_234, cam_rf_1_234 = self.create_cam(x234, self.backbone1.state_dict()['fc_234.0.weight'][class_sort], x.shape[2])
             
             cam_1 = (cam_1_4 + cam_1_34 + cam_1_234) / 3
             cam_rf_1 = (cam_rf_1_4 + cam_rf_1_34 + cam_rf_1_234) / 3
             
-            cam_1 = self.softmax2d(cam_1)
-            cam_rf_1 = self.softmax2d(cam_rf_1)
-            
             mask = torch.where(cam_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
             mask_x = x * mask
+            mask_gt = torch.where(cam_rf_1 > 0.5, torch.tensor(1.).to(device), torch.tensor(0.).to(device))
         
         # classify model ------------------------------------------------------
         result_2 = self.backbone2(mask_x.detach())
         
         
-        return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, cam_rf_1
+        return [result_1, x4_cls, x34_cls, x234_cls], result_2, cam_1, mask_gt

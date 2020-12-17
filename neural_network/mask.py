@@ -105,15 +105,15 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
         self.conv1x1_2 = nn.Conv2d(512, 128, 1, bias = False)
         self.conv1x1_3 = nn.Conv2d(1024, 128, 1, bias = False)
         self.conv1x1_4 = nn.Conv2d(2048, 128, 1, bias = False)
         
-        self.fc_4 = nn.Linear(128, num_classes)
-        self.fc_34 = nn.Linear(128 * 2, num_classes)
-        self.fc_234 = nn.Linear(128 * 3, num_classes)
+        self.fc_4 = self._construct_fc_layer([num_classes], 128)
+        self.fc_34 = self._construct_fc_layer([num_classes], 128 * 2)
+        self.fc_234 = self._construct_fc_layer([num_classes], 128 * 3)
          
         self.dropout = nn.Dropout(p = 0.5)
         
@@ -124,6 +124,34 @@ class ResNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+                
+    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+        """
+        Construct fully connected layer
+
+        - fc_dims (list or tuple): dimensions of fc layers, if None,
+                                   no fc layers are constructed
+        - input_dim (int): input dimension
+        - dropout_p (float): dropout probability, if None, dropout is unused
+        """
+        if fc_dims is None:
+            self.feature_dim = input_dim
+            return None
+        
+        assert isinstance(fc_dims, (list, tuple)), "fc_dims must be either list or tuple, but got {}".format(type(fc_dims))
+        
+        layers = []
+        for dim in fc_dims:
+            layers.append(nn.Linear(input_dim, dim))
+            layers.append(nn.BatchNorm1d(dim))
+            layers.append(nn.ReLU(inplace=True))
+            if dropout_p is not None:
+                layers.append(nn.Dropout(p=dropout_p))
+            input_dim = dim
+        
+        self.feature_dim = fc_dims[-1]
+        
+        return nn.Sequential(*layers)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
