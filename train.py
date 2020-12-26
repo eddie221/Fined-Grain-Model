@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.model as model_net
+import neural_network.classify as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -118,7 +118,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = model_net.Model_Net(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -140,36 +140,51 @@ def create_opt_loss(model, bal_var):
 
 def load_param(model):
     # load resnet
+    params = torch.load("../pretrain/resnet50.pth")
     load = []
     not_load = []
-    params = torch.load("../pretrain/resnet50.pth")
     for name, param in params.items():
-        if name in model.backbone1.state_dict():
+        if name in model.state_dict():
             try:
-                model.backbone1.state_dict()[name].copy_(param)
+                model.state_dict()[name].copy_(param)
                 load.append(name)
             except:
                 not_load.append(name)
         else:
-            print(name)
-                
+            not_load.append(name)
     print("Load {} layers".format(len(load)))
     print("Not load {} layers".format(len(not_load)))
-    load = []
-    not_load = []
-    params = torch.load("../pretrain/resnet50.pth")
-    for name, param in params.items():
-        if name in model.backbone2.state_dict():
-            try:
-                model.backbone2.state_dict()[name].copy_(param)
-                load.append(name)
-            except:
-                not_load.append(name)
-        else:
-            print(name)
-            
-    print("Load {} layers".format(len(load)))
-    print("Not load {} layers".format(len(not_load)))
+# =============================================================================
+#     load = []
+#     not_load = []
+#     for name, param in params.items():
+#         if name in model.backbone1.state_dict():
+#             try:
+#                 model.backbone1.state_dict()[name].copy_(param)
+#                 load.append(name)
+#             except:
+#                 not_load.append(name)
+#         else:
+#             print(name)
+#                 
+#     print("Load {} layers".format(len(load)))
+#     print("Not load {} layers".format(len(not_load)))
+#     load = []
+#     not_load = []
+#     params = torch.load("../pretrain/resnet50.pth")
+#     for name, param in params.items():
+#         if name in model.backbone2.state_dict():
+#             try:
+#                 model.backbone2.state_dict()[name].copy_(param)
+#                 load.append(name)
+#             except:
+#                 not_load.append(name)
+#         else:
+#             print(name)
+#             
+#     print("Load {} layers".format(len(load)))
+#     print("Not load {} layers".format(len(not_load)))
+# =============================================================================
             
     return model
 
@@ -184,25 +199,20 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
         
-    output_1, output_2, cam_1, cam_rf_1 = model(b_data)
-    _, predicted = torch.max(output_2.data, 1)
+    output_1 = model(b_data)
+    _, predicted = torch.max(output_1.data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1[0], b_label)# + loss_func[0](output_2, b_label)
-    for i in range(1, len(output_1)):
-        cls_loss = cls_loss + loss_func[0](output_1[i], b_label)
-    cls_loss = cls_loss + loss_func[0](output_2, b_label)
+    cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_2, b_label)
 
-    er_loss = torch.mean(torch.abs(cam_1.view(cam_1.shape[0], -1) - cam_rf_1.view(cam_rf_1.shape[0], -1)))
-
-    loss = cls_loss + er_loss
+    loss = cls_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
     
-    return loss.data, cls_loss.data, er_loss.data, predicted.data    
+    return loss.data, cls_loss.data, predicted.data    
 
 #training
 def training(model, job):
@@ -237,7 +247,7 @@ def training(model, job):
                 model.train(False)
                 
             for step, (data, label) in enumerate(image_data[phase]):
-                loss, cls_loss, er_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                loss, cls_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                 if use_gpu:
                     b_data = data.to(DEVICE)
                     b_label = label.to(DEVICE)
@@ -247,7 +257,6 @@ def training(model, job):
                     
                 loss_rate += loss * b_data.size(0)
                 cls_rate_1 += cls_loss * b_data.size(0)
-                er_rate += er_loss * b_data.size(0)
                 
                 correct += (predicted == b_label).sum().item()
                 if CON_MATRIX:
