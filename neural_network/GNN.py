@@ -63,9 +63,7 @@ class GNN(nn.Module):
                                  torch.tensor([0.]).to(device))
             self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
             D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
-            I = torch.eye(cha_cor.shape[1]).unsqueeze(0).to(device)
-            I = I.repeat(x.shape[0], 1, 1)
-            self.laplacian = I + torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
+            self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
             
     def forward(self, x):
         self.init_Adjency_Degree_matrix(x)
@@ -81,9 +79,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([2, 128, 14, 14]).cuda()
+    a = torch.randn([2, 3, 5, 5]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([196, 144, 121]).cuda()
+    gnn = GNN([25, 9, 1]).cuda()
     
     a = gnn(a)
