@@ -72,7 +72,10 @@ class GNN(nn.Module):
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
             self._W = self.W[i].repeat(batch, 1, 1)
-            x_linear = torch.matmul(lx, self._W) + self.bias[i]
+            if self.bias is not None:
+                x_linear = torch.matmul(lx, self._W) + self.bias[i]
+            else:
+                x_linear = torch.matmul(lx, self._W)
             x_linear = self.relu(x_linear)
             
         return x_linear
@@ -82,6 +85,6 @@ if __name__ == '__main__':
     a = torch.randn([2, 128, 14, 14]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([196, 144, 121]).cuda()
+    gnn = GNN([196, 256, 324]).cuda()
     
     a = gnn(a)

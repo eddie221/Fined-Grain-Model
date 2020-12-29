@@ -11,12 +11,13 @@ import torchvision.transforms as transforms
 import torchvision
 import torch
 #import args
-import os
 import random
 from PIL import Image
 import numpy as np
 import time
-from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX
+from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX, KFOLD
+from sklearn.model_selection import KFold
+import tqdm
 #from torch.utils.tensorboard import SummaryWriter
 
 #print environment information
@@ -30,46 +31,12 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_dir = '../COFENet/skin/ISIC 2019/'
+data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-class Random2DTranslation(object):
-    
-    """
-    With a probability, first increase image size to (1 + 1/8), and then perform random crop.
-
-    Args:
-    - height (int): target image height.
-    - width (int): target image width.
-    - p (float): probability of performing this transformation. Default: 0.5.
-    """
-    def __init__(self, height, width, p=0.5, interpolation=Image.BILINEAR):
-        self.height = height
-        self.width = width
-        self.p = p
-        self.interpolation = interpolation
-
-    def __call__(self, img):
-        """
-        Args:
-        - img (PIL Image): Image to be cropped.
-        """
-        if random.uniform(0, 1) > self.p:
-            return img.resize((self.width, self.height), self.interpolation)
-        
-        new_width, new_height = int(round(self.width * 1.125)), int(round(self.height * 1.125))
-        #new_width, new_height = 512, 512
-        resized_img = img.resize((new_width, new_height), self.interpolation)
-        x_maxrange = new_width - self.width
-        y_maxrange = new_height - self.height
-        x1 = int(round(random.uniform(0, x_maxrange)))
-        y1 = int(round(random.uniform(0, y_maxrange)))
-        croped_img = resized_img.crop((x1, y1, x1 + self.width, y1 + self.height))
-        return croped_img
-    
 data_transforms = {
         'train': transforms.Compose([
             transforms.Resize((600, 600), Image.BILINEAR),
@@ -80,8 +47,7 @@ data_transforms = {
             
         ]),
         'val': transforms.Compose([
-            transforms.Resize((600, 600), Image.BILINEAR),
-            transforms.CenterCrop(IMAGE_SIZE),
+            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE), Image.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),
@@ -90,30 +56,43 @@ data_transforms = {
 
 
 def load_data():
-    image_datasets = {x : torchvision.datasets.ImageFolder(os.path.join(data_dir, x),
-                                                           data_transforms[x]) 
-                        for x in ['train', 'val']}
+    all_image_datasets = torchvision.datasets.ImageFolder(data_dir, data_transforms['train'])
     
-    image_dataloader = {x : torch.utils.data.DataLoader(image_datasets[x],
-                                                        batch_size=BATCH_SIZE,
-                                                        #sampler = data_sampler[x],
-                                                        shuffle=True,
-                                                        num_workers=16)
-                        for x in ['train', 'val']}
     
-    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
-    print(dataset_sizes)
-    
-    count = torch.zeros([NUM_CLASS])
-    
-    for data in image_datasets['train'].imgs:
-        count[data[1]] += 1
-        
-    count = dataset_sizes['train'] / count
-    
-    count = count / count.sum()
-    print(count)
-    return image_dataloader, dataset_sizes, count
+    dataloader = []
+    dataset_sizes = []
+    if KFOLD != 1:
+        kf = KFold(KFOLD, shuffle = True)
+        for train_idx, val_idx in kf.split(all_image_datasets):
+            train_dataset = torch.utils.data.Subset(all_image_datasets, train_idx)
+            trainloader = torch.utils.data.DataLoader(train_dataset, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2)    
+            val_dataset = torch.utils.data.Subset(all_image_datasets, val_idx)
+            valloader = torch.utils.data.DataLoader(val_dataset, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2)
+            dataloader.append({'train' : trainloader, 'val' : valloader})
+            dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
+    else:
+        dataloader.append(torch.utils.data.DataLoader(all_image_datasets,
+                                                    batch_size = BATCH_SIZE,
+                                                    #sampler = data_sampler[x],
+                                                    shuffle = True,
+                                                    num_workers = 16))
+        dataset_sizes.append(len(all_image_datasets))
+    return dataloader, dataset_sizes, all_image_datasets
+# =============================================================================
+#     dataset_sizes = len(all_image_datasets)
+#     print(dataset_sizes)
+#     
+#     count = torch.zeros([NUM_CLASS])
+#     
+#     for data in all_image_datasets.imgs:
+#         count[data[1]] += 1
+#         
+#     count = dataset_sizes['train'] / count
+#     
+#     count = count / count.sum()
+#     print(count)
+#     return all_image_dataloader, dataset_sizes, count
+# =============================================================================
 
 def create_nn_model():
     global model_name
@@ -123,10 +102,9 @@ def create_nn_model():
     #model = model.to(DEVICE)
     return model
 
-def create_opt_loss(model, bal_var):
+def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
-    bal_var = bal_var.to(DEVICE)
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
                  torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
                 ]
@@ -215,111 +193,121 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     return loss.data, cls_loss.data, predicted.data    
 
 #training
-def training(model, job):
+def training(job):
     global t_min_loss
     global optimizer_select
     global loss_function_select
     global model_name
     #with torch.autograd.set_detect_anomaly(True):
-    max_acc = {'train' : 0.0, 'val' : 0.0}
-    min_loss = {'train' : 10000.0, 'val' : 10000.0}
-    last_acc = {'train': 0.0, 'val':0.0}
-    image_data, dataset_sizes, bal_var = load_data()
-    best_epoch = 0
-    min_loss_epoch = 0
-    optimizers, lr_schedulers, loss_func = create_opt_loss(model, bal_var)
-    for epoch in range(EPOCH):
-        start = time.time()
-        print('Epoch {}/{}'.format(epoch, EPOCH - 1))
-        print('-' * 10)
-        if CON_MATRIX:
-            confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
-        for phase in job:
-            loss_rate = 0.0
-            cls_rate_1 = 0.0
-            cls_rate_2 = 0.0
-            er_rate = 0.0
-            correct = 0.0
-            
-            if phase == 'train':
-                model.train(True)
-            else:
-                model.train(False)
-                
-            for step, (data, label) in enumerate(image_data[phase]):
-                loss, cls_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
-                if use_gpu:
-                    b_data = data.to(DEVICE)
-                    b_label = label.to(DEVICE)
-                else:
-                    b_data = data
-                    b_label = label
-                    
-                loss_rate += loss * b_data.size(0)
-                cls_rate_1 += cls_loss * b_data.size(0)
-                
-                correct += (predicted == b_label).sum().item()
-                if CON_MATRIX:
-                    np.add.at(confusion_matrix[phase], tuple([predicted.cpu().detach().numpy(), b_label.cpu().detach().numpy()]), 1)
-            
-            loss_rate = loss_rate / dataset_sizes[phase]
-            cls_rate_1 = cls_rate_1 / dataset_sizes[phase]
-            cls_rate_2 = cls_rate_2 / dataset_sizes[phase]
-            er_rate = er_rate / dataset_sizes[phase]
-            correct = correct / dataset_sizes[phase]
-
-            if max_acc[phase] < correct:
-                last_acc[phase] = max_acc[phase]
-                max_acc[phase] = correct
-                if phase == 'val':
-                    best_epoch = epoch
-                    save_data = {'Model_name' : model_name,
-                             'Optimizer' : optimizer_select,
-                             'Loss_function' : loss_function_select,
-                             'Epoch' : epoch + 1,
-                             'Best_acc' : correct,
-                             'model_param' : model.state_dict()}
-                    print('save')
-                    torch.save(save_data, './pkl/{}_{}.pkl'.format(model_name, INDEX))
-                    
-# =============================================================================
-#             if phase == "train":
-#                 writer.add_scalar('Loss/train', loss, epoch)
-#                 writer.add_scalar('Accuracy/train', correct, epoch)
-#             else:
-#                 writer.add_scalar('Loss/test', loss, epoch)
-#                 writer.add_scalar('Accuracy/test', correct, epoch)
-# =============================================================================
-            
-            if min_loss[phase] > loss_rate:
-                min_loss[phase] = loss_rate
-                if phase == 'train':
-                    min_loss_epoch = epoch
-            
-            print('Index : {}'.format(INDEX))
-            print("dataset : {}".format(data_dir))
-            print("Model name : {}".format(model_name))
-            print("{} set loss : {:.6f}".format(phase, loss_rate))
-            print("{} set cls_loss_1 : {:.6f}".format(phase, cls_rate_1))
-            print("{} set cls_loss_2 : {:.6f}".format(phase, cls_rate_2))
-            print("{} set er_loss : {:.6f}".format(phase, er_rate))
-            print("{} set min loss : {:.6f}".format(phase, min_loss[phase]))
-            print("{} set acc : {:.6f}%".format(phase, correct * 100.0))
-            print("{} last update : {:.6f}%".format(phase, max_acc[phase] * 100 - last_acc[phase] * 100))
-            print("{} set max acc : {:.6f}%".format(phase, max_acc[phase] * 100.0))
-            if phase == 'train':
-                print('min loss epoch : {}'.format(min_loss_epoch))
-            if phase == 'val' :
-                print('best acc epoch : {}'.format(best_epoch))
-            if CON_MATRIX:
-                print("{} confusion matrix :".format(phase))
-                print(confusion_matrix[phase])
-            print()   
+    kfold_image_data, dataset_sizes, all_image_datasets = load_data()
+    ACCMeters = []
+    LOSSMeters = []
+    for i in range(KFOLD):
+        ACCMeters.append(AverageMeter(True))
+        LOSSMeters.append(AverageMeter(False))
         
-        for lr_scheduler in lr_schedulers:
-            lr_scheduler.step()
+    for index, image_data in enumerate(kfold_image_data):
+        model = create_nn_model()
+        model = load_param(model)
+        optimizers, lr_schedulers, loss_func = create_opt_loss(model)
+        
+        max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}
+        last_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        
+        for epoch in range(1, EPOCH + 1):
+            start = time.time()
+            print('Epoch {}/{}'.format(epoch, EPOCH - 1))
+            print('-' * 10)
+            if CON_MATRIX:
+                confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
+            for phase in job:
+                loss_t = AverageMeter(False)
+                correct_t = AverageMeter(True)
+                cls_rate_1 = AverageMeter(False)
+                
+                if phase == 'train':
+                    model.train(True)
+                    all_image_datasets.transform = data_transforms['train']
+                else:
+                    model.train(False)
+                    all_image_datasets.transform = data_transforms['val']
+                for data, label in tqdm.tqdm(image_data[phase]):
+                    loss, cls_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                    if use_gpu:
+                        b_data = data.to(DEVICE)
+                        b_label = label.to(DEVICE)
+                    else:
+                        b_data = data
+                        b_label = label
+                    
+                    loss_t.update(loss, b_data.size(0))
+                    cls_rate_1.update(cls_loss, b_data.size(0))
+                    correct_t.update((predicted == b_label).sum().item(), label.shape[0])
+                    
+                    if CON_MATRIX:
+                        np.add.at(confusion_matrix[phase], tuple([predicted.cpu().detach().numpy(), b_label.cpu().detach().numpy()]), 1)
+                
+                if max_acc[phase].avg < correct_t.avg:
+                    last_acc[phase] = max_acc[phase]
+                    max_acc[phase] = correct_t
+                    
+                    if phase == 'val':
+                        ACCMeters[index] = correct_t
+                        LOSSMeters[index] = loss_t
+                        save_data = model.state_dict()
+                        print('save')
+                        torch.save(save_data, './pkl/{}_{}_{}_{}.pkl'.format(epoch, index, model_name, INDEX))
+                        
+    # =============================================================================
+    #             if phase == "train":
+    #                 writer.add_scalar('Loss/train', loss, epoch)
+    #                 writer.add_scalar('Accuracy/train', correct, epoch)
+    #             else:
+    #                 writer.add_scalar('Loss/test', loss, epoch)
+    #                 writer.add_scalar('Accuracy/test', correct, epoch)
+    # =============================================================================
+                
+                print('Index : {}'.format(INDEX))
+                print("dataset : {}".format(data_dir))
+                print("Model name : {}".format(model_name))
+                print("{} set loss : {:.6f}".format(phase, loss_t.avg))
+                print("{} set cls_loss_1 : {:.6f}".format(phase, cls_rate_1.avg))
+                print("{} set min loss : {:.6f}".format(phase, min_loss[phase].avg))
+                print("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))
+                print("{} last update : {:.6f}%".format(phase, (max_acc[phase].avg - last_acc[phase].avg) * 100.))
+                print("{} set max acc : {:.6f}%".format(phase, max_acc[phase].avg * 100.))
+                if CON_MATRIX:
+                    print("{} confusion matrix :".format(phase))
+                    print(confusion_matrix[phase])
+                print()   
             
-        print(time.time() - start)
+            for lr_scheduler in lr_schedulers:
+                lr_scheduler.step()
+                
+            print(time.time() - start)
+            
+class AverageMeter():
+    """Computes and stores the average and current value"""
+
+    def __init__(self, acc):
+        self.reset()
+        self.acc = acc
+    def reset(self):
+        self.value = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, value, batch):
+        self.value = value
+        if self.acc:
+            self.sum += value
+        else:       
+            self.sum += value * batch
+        self.count += batch
+        self.avg = self.sum / self.count
+
         
 def rand_bbox(size, lam):
     W = size[2]
@@ -340,6 +328,4 @@ def rand_bbox(size, lam):
     return bbx1, bby1, bbx2, bby2
 
 if __name__ == '__main__':
-    model = create_nn_model()
-    model = load_param(model)
-    training = training(model, ['train', 'val'])
+    training = training(['train', 'val'])
