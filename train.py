@@ -108,7 +108,7 @@ def create_opt_loss(model):
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
                  torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 100, 150], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[15, 30, 45], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss()]
@@ -217,7 +217,7 @@ def training(job):
         
         for epoch in range(1, EPOCH + 1):
             start = time.time()
-            print('Epoch {}/{}'.format(epoch, EPOCH - 1))
+            print('Fold {}/{} Epoch {}/{}'.format(index, KFOLD, epoch, EPOCH - 1))
             print('-' * 10)
             if CON_MATRIX:
                 confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
@@ -232,6 +232,7 @@ def training(job):
                 else:
                     model.train(False)
                     all_image_datasets.transform = data_transforms['val']
+                    
                 for data, label in tqdm.tqdm(image_data[phase]):
                     loss, cls_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                     if use_gpu:
@@ -257,7 +258,7 @@ def training(job):
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
-                        torch.save(save_data, './pkl/{}_{}_{}_{}.pkl'.format(epoch, index, model_name, INDEX))
+                        torch.save(save_data, './pkl/fold_{}_epoch_{}_{}.pkl'.format(index, epoch, INDEX))
                         
     # =============================================================================
     #             if phase == "train":

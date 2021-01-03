@@ -106,11 +106,15 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
         
-        self.gnn = GNN([196, 256, 324])
-        self.gnn_fc = self._construct_fc_layer([1024], 324 * 256)
+        self.gnn3 = GNN([784, 900, 1024])
+        self.gnn_fc3 = self._construct_fc_layer([1024], 1024 * 128)
         
+        self.gnn4 = GNN([196, 256, 324])
+        self.gnn_fc4 = self._construct_fc_layer([1024], 324 * 256)
+        
+        self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
         
         for m in self.modules():
@@ -184,13 +188,18 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        x3 = self.gnn3(self.squeeze3(x))
+        x3 = x3.view(x.shape[0], -1)
+        x3 = self.gnn_fc3(x3)
+        
         x = self.layer4(x)
-        x4 = self.gnn(self.squeeze4(x))
+        x4 = self.gnn4(self.squeeze4(x))
         x4 = x4.view(x.shape[0], -1)
-        x4 = self.gnn_fc(x4)
+        x4 = self.gnn_fc4(x4)
+        
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x4], dim = 1)
+        x = torch.cat([x, x3, x4], dim = 1)
         x = self.fc(x)
 
         return x
