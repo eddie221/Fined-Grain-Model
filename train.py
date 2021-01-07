@@ -258,7 +258,7 @@ def training(job):
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
-                        torch.save(save_data, './pkl/fold_{}_epoch_{}_{}.pkl'.format(index, epoch, INDEX))
+                        torch.save(save_data, './pkl/fold_{}_best_{}.pkl'.format(index, INDEX))
                         
     # =============================================================================
     #             if phase == "train":
@@ -287,7 +287,14 @@ def training(job):
                 lr_scheduler.step()
                 
             print(time.time() - start)
-            
+    acc = 0
+    loss = 0
+    for idx in range(1, len(ACCMeters) + 1):
+        print("Fold {} best acc : {:.6f} loss : {:.6f}".format(idx, ACCMeters[idx].avg, LOSSMeters[idx].avg))
+        acc += ACCMeters[idx].avg
+        loss += LOSSMeters[idx].avg
+    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc, loss))
+    
 class AverageMeter():
     """Computes and stores the average and current value"""
 

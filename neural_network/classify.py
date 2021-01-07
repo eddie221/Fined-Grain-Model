@@ -106,16 +106,11 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
-        
-        self.gnn3 = GNN([784, 900, 1024])
-        self.gnn_fc3 = self._construct_fc_layer([1024], 1024 * 128)
-        
-        self.gnn4 = GNN([196, 256, 324])
-        self.gnn_fc4 = self._construct_fc_layer([1024], 324 * 256)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.squeeze4 = nn.Conv2d(2048, 256, 1)
+        self.gnn3 = GNN([128, 256, 512])
+        self.gnn_fc3 = self._construct_fc_layer([1024], 784 * 512)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -175,7 +170,7 @@ class ResNet(nn.Module):
         x_flatten = x.view(b, c, -1)
         cha_cor = self.relu(torch.bmm(x_flatten, x_flatten.permute(0, 2, 1)))
         cha_cor_max, max_index = torch.max(cha_cor, dim = 1, keepdim = True)
-        cha_cor_min, max_index = torch.min(cha_cor, dim = 1, keepdim = True)
+        cha_cor_min, min_index = torch.min(cha_cor, dim = 1, keepdim = True)
         cha_cor = (cha_cor - cha_cor_min) / (cha_cor_max - cha_cor_min)
         return cha_cor
     
@@ -188,18 +183,15 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x3 = self.gnn3(self.squeeze3(x))
-        x3 = x3.view(x.shape[0], -1)
+        x3 = self.gnn3(self.squeeze3(x).permute(0, 2, 3, 1).view(x.shape[0], x.shape[2] * x.shape[3], -1))
+        x3 = x3.view(x3.shape[0], -1)
         x3 = self.gnn_fc3(x3)
         
         x = self.layer4(x)
-        x4 = self.gnn4(self.squeeze4(x))
-        x4 = x4.view(x.shape[0], -1)
-        x4 = self.gnn_fc4(x4)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x3, x4], dim = 1)
+        x = torch.cat([x, x3], dim = 1)
         x = self.fc(x)
 
         return x

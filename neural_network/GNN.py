@@ -38,8 +38,10 @@ class GNN(nn.Module):
                 self.bias[i].data.uniform_(-stdv, stdv)
             
     def channel_correlation(self, x):
-        batch, channel, height, width = x.shape
-        x = x.view(batch, channel, -1)
+        if len(x.shape) == 4:
+            batch, channel, height, width = x.shape
+            x = x.view(batch, channel, -1)
+
         x_t = x.permute(0, 2, 1)
         x_2 = torch.pow(x, 2)
         x_2 = torch.sqrt(torch.sum(x_2, dim = 2, keepdim = True))
@@ -67,8 +69,14 @@ class GNN(nn.Module):
             
     def forward(self, x):
         self.init_Adjency_Degree_matrix(x)
-        batch, channel, height, width = x.shape
-        x_linear = x.view(batch, channel, -1)
+        
+        if len(x.shape) == 4:
+            batch, channel, height, width = x.shape
+            x_linear = x.view(batch, channel, -1)
+        else:
+            batch, channel, feature = x.shape
+            x_linear = x
+            
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
             self._W = self.W[i].repeat(batch, 1, 1)
