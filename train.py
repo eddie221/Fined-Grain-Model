@@ -176,7 +176,6 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     for optimizer in optimizers:
         optimizer.zero_grad() 
-        
     output_1 = model(b_data)
     _, predicted = torch.max(output_1.data, 1)
     
