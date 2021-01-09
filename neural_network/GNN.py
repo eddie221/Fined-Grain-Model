@@ -8,6 +8,7 @@ Created on Fri Dec 25 17:46:50 2020
 import torch.nn as nn
 import torch
 import math
+import numpy as np
 
 class GNN(nn.Module):
     def __init__(self, feature, threshold = 0.005, bias = True):
@@ -51,6 +52,34 @@ class GNN(nn.Module):
         norm_x = Numerator_x / Denominator_x
         return norm_x
     
+    def init_Adjency_Degree_matrix2(self, x):
+        if x.get_device() == -1:
+            device = "cpu"
+        else:
+            device = x.get_device()
+            
+        if len(x.shape) == 3:
+            x = x.permute(0, 2, 1)
+            x = x.reshape([x.shape[0], x.shape[1], int(np.sqrt(x.shape[2])), int(np.sqrt(x.shape[2]))])
+        
+        unfold = nn.Unfold(3, padding = 1)
+        fold = nn.Fold(x.shape[2], 3, padding = 1)
+        base = torch.zeros([x.shape[0], 1, x.shape[2], x.shape[3]]).to(device)
+        adjency = []
+        
+        with torch.no_grad():
+            adjency_base = unfold(base).permute(0, 2, 1)
+            for i in range(adjency_base.shape[1]):
+                adjency_base = unfold(base).permute(0, 2, 1)
+                adjency_base[:, i, :] = 1
+                adjency_base = fold(adjency_base.permute(0, 2, 1))
+                adjency.append(adjency_base.view(x.shape[0], -1))
+        adjency = torch.stack(adjency, dim = 1)
+        self.A = adjency
+        self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
+        D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
+        self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
+            
     def init_Adjency_Degree_matrix(self, x):
         if x.get_device() == -1:
             device = "cpu"
@@ -68,7 +97,7 @@ class GNN(nn.Module):
             self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
             
     def forward(self, x):
-        self.init_Adjency_Degree_matrix(x)
+        self.init_Adjency_Degree_matrix2(x)
         
         if len(x.shape) == 4:
             batch, channel, height, width = x.shape
@@ -90,9 +119,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([2, 128, 14, 14]).cuda()
+    a = torch.randn([1, 9, 2]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([196, 256, 324]).cuda()
+    gnn = GNN([2, 3, 4]).cuda()
     
     a = gnn(a)

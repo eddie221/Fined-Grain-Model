@@ -39,7 +39,7 @@ def get_lr(optimizer):
 
 data_transforms = {
         'train': transforms.Compose([
-            transforms.Resize((600, 600), Image.BILINEAR),
+            transforms.Resize((300, 300), Image.BILINEAR),
             transforms.RandomCrop(IMAGE_SIZE),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -189,7 +189,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         for optimizer in optimizers:
             optimizer.step()
     
-    return loss.data, cls_loss.data, predicted.data    
+    return loss.item(), predicted.detach().cpu()
 
 #training
 def training(job):
@@ -209,14 +209,13 @@ def training(job):
         model = create_nn_model()
         model = load_param(model)
         optimizers, lr_schedulers, loss_func = create_opt_loss(model)
-        
         max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}
         last_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         
         for epoch in range(1, EPOCH + 1):
             start = time.time()
-            print('Fold {}/{} Epoch {}/{}'.format(index, KFOLD, epoch, EPOCH - 1))
+            print('Fold {}/{} Epoch {}/{}'.format(index + 1, KFOLD, epoch, EPOCH))
             print('-' * 10)
             if CON_MATRIX:
                 confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
@@ -233,21 +232,14 @@ def training(job):
                     all_image_datasets.transform = data_transforms['val']
                     
                 for data, label in tqdm.tqdm(image_data[phase]):
-                    loss, cls_loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
-                    if use_gpu:
-                        b_data = data.to(DEVICE)
-                        b_label = label.to(DEVICE)
-                    else:
-                        b_data = data
-                        b_label = label
+                    loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                     
-                    loss_t.update(loss, b_data.size(0))
-                    cls_rate_1.update(cls_loss, b_data.size(0))
-                    correct_t.update((predicted == b_label).sum().item(), label.shape[0])
+                    loss_t.update(loss, data.size(0))
+                    correct_t.update((predicted.cpu() == label).sum().item(), label.shape[0])
                     
                     if CON_MATRIX:
-                        np.add.at(confusion_matrix[phase], tuple([predicted.cpu().detach().numpy(), b_label.cpu().detach().numpy()]), 1)
-                
+                        np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
+
                 if max_acc[phase].avg < correct_t.avg:
                     last_acc[phase] = max_acc[phase]
                     max_acc[phase] = correct_t
@@ -286,13 +278,17 @@ def training(job):
                 lr_scheduler.step()
                 
             print(time.time() - start)
+        del model
+        del optimizers
+        del lr_schedulers
+        del loss_func
     acc = 0
     loss = 0
     for idx in range(1, len(ACCMeters) + 1):
-        print("Fold {} best acc : {:.6f} loss : {:.6f}".format(idx, ACCMeters[idx].avg, LOSSMeters[idx].avg))
-        acc += ACCMeters[idx].avg
-        loss += LOSSMeters[idx].avg
-    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc, loss))
+        print("Fold {} best acc : {:.6f} loss : {:.6f}".format(idx, ACCMeters[idx - 1].avg, LOSSMeters[idx - 1].avg))
+        acc += ACCMeters[idx - 1].avg
+        loss += LOSSMeters[idx - 1].avg
+    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc / 5, loss / 5))
     
 class AverageMeter():
     """Computes and stores the average and current value"""

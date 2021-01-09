@@ -12,3 +12,5 @@ test_func.py
 result/
 
 ISIC_2019_Test_Input/
+
+dataset.py
