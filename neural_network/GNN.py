@@ -11,8 +11,9 @@ import math
 import numpy as np
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True):
+    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1):
         super(GNN, self).__init__()
+        self.distance = dist
         self.A = None
         self.D = None
         self.laplacian = None
@@ -62,19 +63,20 @@ class GNN(nn.Module):
             x = x.permute(0, 2, 1)
             x = x.reshape([x.shape[0], x.shape[1], int(np.sqrt(x.shape[2])), int(np.sqrt(x.shape[2]))])
         
-        unfold = nn.Unfold(3, padding = 1)
-        fold = nn.Fold(x.shape[2], 3, padding = 1)
+        unfold = nn.Unfold(3 + (self.distance - 1) * 2, padding = (self.distance - 1) * 2)
+        fold = nn.Fold(x.shape[2], 3 + (self.distance - 1) * 2, padding = (self.distance - 1) * 2)
         base = torch.zeros([x.shape[0], 1, x.shape[2], x.shape[3]]).to(device)
         adjency = []
-        
         with torch.no_grad():
             adjency_base = unfold(base).permute(0, 2, 1)
-            for i in range(adjency_base.shape[1]):
+            num = adjency_base.shape[1]
+            for i in range(num):
                 adjency_base = unfold(base).permute(0, 2, 1)
                 adjency_base[:, i, :] = 1
                 adjency_base = fold(adjency_base.permute(0, 2, 1))
                 adjency.append(adjency_base.view(x.shape[0], -1))
-        adjency = torch.stack(adjency, dim = 1)
+            adjency = torch.stack(adjency, dim = 1)
+            
         self.A = adjency
         self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
         D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
@@ -119,9 +121,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([1, 9, 2]).cuda()
+    a = torch.randn([1, 25, 2]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([2, 3, 4]).cuda()
+    gnn = GNN([2, 3, 4], dist = 2).cuda()
     
     a = gnn(a)
