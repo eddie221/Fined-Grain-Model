@@ -11,16 +11,18 @@ import math
 import numpy as np
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1):
+    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1):
         super(GNN, self).__init__()
         self.distance = dist
         self.A = None
         self.D = None
+        self.power = power
         self.laplacian = None
         self.relu = nn.ReLU()
         self.threshold = threshold
         self.layer = len(feature) - 1
         self.W = nn.ParameterList([])
+
         if bias:
             self.bias = nn.ParameterList([])
         else:
@@ -63,10 +65,11 @@ class GNN(nn.Module):
             x = x.permute(0, 2, 1)
             x = x.reshape([x.shape[0], x.shape[1], int(np.sqrt(x.shape[2])), int(np.sqrt(x.shape[2]))])
         
-        unfold = nn.Unfold(3 + (self.distance - 1) * 2, padding = (self.distance - 1) * 2)
-        fold = nn.Fold(x.shape[2], 3 + (self.distance - 1) * 2, padding = (self.distance - 1) * 2)
+        unfold = nn.Unfold(3 + (self.distance - 1) * 2, padding = self.distance)
+        fold = nn.Fold(x.shape[2], 3 + (self.distance - 1) * 2, padding = self.distance)
         base = torch.zeros([x.shape[0], 1, x.shape[2], x.shape[3]]).to(device)
         adjency = []
+
         with torch.no_grad():
             adjency_base = unfold(base).permute(0, 2, 1)
             num = adjency_base.shape[1]
@@ -76,8 +79,12 @@ class GNN(nn.Module):
                 adjency_base = fold(adjency_base.permute(0, 2, 1))
                 adjency.append(adjency_base.view(x.shape[0], -1))
             adjency = torch.stack(adjency, dim = 1)
-            
+        
         self.A = adjency
+        
+        for i in range(1, self.power):
+            self.A = torch.bmm(self.A, adjency)
+        
         self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
         D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
         self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
@@ -99,14 +106,15 @@ class GNN(nn.Module):
             self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
             
     def forward(self, x):
-        self.init_Adjency_Degree_matrix2(x)
         
         if len(x.shape) == 4:
             batch, channel, height, width = x.shape
             x_linear = x.view(batch, channel, -1)
+            self.init_Adjency_Degree_matrix(x)
         else:
             batch, channel, feature = x.shape
             x_linear = x
+            self.init_Adjency_Degree_matrix2(x)
             
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
@@ -121,9 +129,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([1, 25, 2]).cuda()
+    a = torch.randn([1, 36, 5]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([2, 3, 4], dist = 2).cuda()
+    gnn = GNN([5,4,3], dist = 2, power = 2).cuda()
     
     a = gnn(a)
