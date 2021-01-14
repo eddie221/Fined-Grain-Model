@@ -11,9 +11,10 @@ import math
 import numpy as np
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1):
+    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1, grid_adjacency = False):
         super(GNN, self).__init__()
         self.distance = dist
+        self.grid_adjacency = grid_adjacency
         self.A = None
         self.D = None
         self.power = power
@@ -114,8 +115,11 @@ class GNN(nn.Module):
         else:
             batch, channel, feature = x.shape
             x_linear = x
-            self.init_Adjency_Degree_matrix2(x)
-            
+            if self.grid_adjacency:
+                self.init_Adjency_Degree_matrix2(x)
+            else:
+                self.init_Adjency_Degree_matrix(x)
+                
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
             self._W = self.W[i].repeat(batch, 1, 1)
