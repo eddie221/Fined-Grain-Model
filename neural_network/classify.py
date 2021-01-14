@@ -109,11 +109,11 @@ class ResNet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.gnn3 = GNN([128, 256, 512], dist = 1, power = 1)
+        self.gnn3 = GNN([128, 256, 512], dist = 2, power = 1)
         self.gnn_fc3 = self._construct_fc_layer([1024], 196 * 512)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
-        self.gnn4 = GNN([256, 512, 1024], dist = 1, power = 1)
+        self.gnn4 = GNN([256, 512, 1024], dist = 2, power = 1)
         self.gnn_fc4 = self._construct_fc_layer([1024], 49 * 1024)
         
         for m in self.modules():
