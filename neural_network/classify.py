@@ -109,11 +109,11 @@ class ResNet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.gnn3 = GNN([128, 256, 512], dist = 2, power = 1)
+        self.gnn3 = GNN([128, 256, 512], dist = 1, power = 1, grid_adjacency = True)
         self.gnn_fc3 = self._construct_fc_layer([1024], 196 * 512)
         
         self.squeeze4 = nn.Conv2d(2048, 256, 1)
-        self.gnn4 = GNN([256, 512, 1024], dist = 2, power = 1)
+        self.gnn4 = GNN([256, 512, 1024], dist = 1, power = 1, grid_adjacency = True)
         self.gnn_fc4 = self._construct_fc_layer([1024], 49 * 1024)
         
         for m in self.modules():
@@ -187,11 +187,11 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x3 = self.gnn3(self.squeeze3(x).permute(0, 2, 3, 1).view(x.shape[0], x.shape[2] * x.shape[3], -1))
+        x3 = self.gnn3(self.squeeze3(x))
         x3 = x3.view(x3.shape[0], -1)
         x3 = self.gnn_fc3(x3)
         x = self.layer4(x)
-        x4 = self.gnn4(self.squeeze4(x).permute(0, 2, 3, 1).view(x.shape[0], x.shape[2] * x.shape[3], -1))
+        x4 = self.gnn4(self.squeeze4(x))
         x4 = x4.view(x4.shape[0], -1)
         x4 = self.gnn_fc4(x4)
         

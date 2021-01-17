@@ -11,10 +11,11 @@ import math
 import numpy as np
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1, grid_adjacency = False):
+    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1, grid_adjacency = False, channel_feature = True):
         super(GNN, self).__init__()
         self.distance = dist
         self.grid_adjacency = grid_adjacency
+        self.channel_feature = channel_feature
         self.A = None
         self.D = None
         self.power = power
@@ -23,6 +24,7 @@ class GNN(nn.Module):
         self.threshold = threshold
         self.layer = len(feature) - 1
         self.W = nn.ParameterList([])
+        self.pad = nn.ReplicationPad2d(self.distance)
 
         if bias:
             self.bias = nn.ParameterList([])
@@ -42,10 +44,12 @@ class GNN(nn.Module):
             if self.bias is not None:
                 self.bias[i].data.uniform_(-stdv, stdv)
             
-    def channel_correlation(self, x):
+    def correlation(self, x):
         if len(x.shape) == 4:
             batch, channel, height, width = x.shape
             x = x.view(batch, channel, -1)
+            if self.channel_feature:
+                x = x.permute(0, 2, 1)
 
         x_t = x.permute(0, 2, 1)
         x_2 = torch.pow(x, 2)
@@ -61,31 +65,29 @@ class GNN(nn.Module):
             device = "cpu"
         else:
             device = x.get_device()
-            
-        if len(x.shape) == 3:
-            x = x.permute(0, 2, 1)
-            x = x.reshape([x.shape[0], x.shape[1], int(np.sqrt(x.shape[2])), int(np.sqrt(x.shape[2]))])
         
+        x = self.pad(x)
+        select = torch.arange(x.shape[2] * x.shape[3]).reshape(x.shape[2], x.shape[3])[1:-1, 1:-1].reshape(-1)
+    
         unfold = nn.Unfold(3 + (self.distance - 1) * 2, padding = self.distance)
         fold = nn.Fold(x.shape[2], 3 + (self.distance - 1) * 2, padding = self.distance)
         base = torch.zeros([x.shape[0], 1, x.shape[2], x.shape[3]]).to(device)
         adjency = []
-
         with torch.no_grad():
             adjency_base = unfold(base).permute(0, 2, 1)
-            num = adjency_base.shape[1]
+            num = x.shape[2] * x.shape[3]
             for i in range(num):
                 adjency_base = unfold(base).permute(0, 2, 1)
                 adjency_base[:, i, :] = 1
                 adjency_base = fold(adjency_base.permute(0, 2, 1))
-                adjency.append(adjency_base.view(x.shape[0], -1))
+                adjency.append(adjency_base[:, :, 1 : -1, 1 : -1].reshape(x.shape[0], -1))
             adjency = torch.stack(adjency, dim = 1)
         
-        self.A = adjency
-        
+        self.A = adjency[:, select, :]
+
         for i in range(1, self.power):
             self.A = torch.bmm(self.A, adjency)
-        
+            
         self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
         D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
         self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
@@ -97,7 +99,7 @@ class GNN(nn.Module):
             device = x.get_device()
             
         with torch.no_grad():
-            cha_cor = self.channel_correlation(x)
+            cha_cor = self.correlation(x)
             self.A = self.relu(cha_cor)
             self.A = torch.where(self.A > self.threshold,
                                  torch.tensor([1.]).to(device),
@@ -108,18 +110,19 @@ class GNN(nn.Module):
             
     def forward(self, x):
         
-        if len(x.shape) == 4:
-            batch, channel, height, width = x.shape
-            x_linear = x.view(batch, channel, -1)
-            self.init_Adjency_Degree_matrix(x)
-        else:
-            batch, channel, feature = x.shape
-            x_linear = x
+        batch, channel, height, width = x.shape
+        
+        if self.channel_feature:
+            x_linear = x.view(batch, channel, -1).permute(0, 2, 1)
             if self.grid_adjacency:
                 self.init_Adjency_Degree_matrix2(x)
             else:
                 self.init_Adjency_Degree_matrix(x)
-                
+            
+        else:
+            x_linear = x.view(batch, channel, -1)
+            self.init_Adjency_Degree_matrix(x)
+        
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
             self._W = self.W[i].repeat(batch, 1, 1)
@@ -127,15 +130,16 @@ class GNN(nn.Module):
                 x_linear = torch.matmul(lx, self._W) + self.bias[i]
             else:
                 x_linear = torch.matmul(lx, self._W)
+            x_linear = torch.nn.functional.instance_norm(x_linear)
             x_linear = self.relu(x_linear)
             
         return x_linear
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([1, 36, 5]).cuda()
+    a = torch.randn([1, 3, 4, 4]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([5,4,3], dist = 2, power = 2).cuda()
+    gnn = GNN([3,3,3], dist = 1, power = 1, grid_adjacency = True, channel_feature = True).cuda()
     
     a = gnn(a)
