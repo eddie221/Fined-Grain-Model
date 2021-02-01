@@ -18,7 +18,7 @@ class cofeature_fast(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
-        
+        self.raw_weight = nn.Parameter(torch.randn(1, 5, 1))
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
         
@@ -65,10 +65,11 @@ class cofeature_fast(nn.Module):
         cofe = torch.stack(cofe)
         cofe = cofe.transpose(0,1)
         cofe = nn.functional.normalize(cofe, dim=-1)
-        return cofe
+        weight = (self.raw_weight - torch.min(self.raw_weight)) / (torch.max(self.raw_weight) - torch.min(self.raw_weight))
+        return cofe * weight
     
 if __name__ == '__main__':
     c = cofeature_fast()
-    a = torch.randn([1, 5, 5, 5])
-    c(a)
+    a = torch.randn([1, 128, 14, 14])
+    print(c(a).shape)
     

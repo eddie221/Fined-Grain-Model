@@ -8,14 +8,14 @@ Created on Fri Dec 25 17:46:50 2020
 import torch.nn as nn
 import torch
 import math
-import numpy as np
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1, grid_adjacency = False, channel_feature = True):
+    def __init__(self, feature, threshold = 0.005, bias = True, dist = 1, power = 1, grid_adjacency = False, channel_feature = True, direction = None):
         super(GNN, self).__init__()
         self.distance = dist
         self.grid_adjacency = grid_adjacency
         self.channel_feature = channel_feature
+        self.direction = direction
         self.A = None
         self.D = None
         self.power = power
@@ -23,26 +23,34 @@ class GNN(nn.Module):
         self.relu = nn.ReLU()
         self.threshold = threshold
         self.layer = len(feature) - 1
-        self.W = nn.ParameterList([])
-        self.pad = nn.ReplicationPad2d(self.distance)
-
-        if bias:
-            self.bias = nn.ParameterList([])
+            
+        if direction is None:
+            self.W = nn.ParameterList([])
+            for i in range(1, len(feature)):
+                self.W.append(nn.Parameter(torch.randn(1, feature[i - 1], feature[i])))
+                
         else:
-            self.bias = None
-        for i in range(1, len(feature)):
-            self.W.append(nn.Parameter(torch.randn(1, feature[i - 1], feature[i])))
-            self.bias.append(nn.Parameter(torch.randn(1)))
+            self.W = []
+            for i in range(0, len(direction)):
+                self.W.append(nn.ParameterList([]))
+                for j in range(1, len(feature)):
+                    print('i : {} j : {}'.format(i, j))
+                    self.W[i].append(nn.Parameter(torch.randn(1, feature[j - 1], feature[j])))
+        self.pad = nn.ReplicationPad2d(self.distance)
+        
             
         self.__init_W_bias__()
         
     def __init_W_bias__(self):
-        for i in range(self.layer):
-            stdv = 1. / math.sqrt(self.W[i].size(1))
-            self.W[i].data.uniform_(-stdv, stdv)
-            
-            if self.bias is not None:
-                self.bias[i].data.uniform_(-stdv, stdv)
+        if self.direction is None:
+            for i in range(self.layer):
+                stdv = 1. / math.sqrt(self.W[i].size(1))
+                self.W[i].data.uniform_(-stdv, stdv)
+        else:
+            for i in range(len(self.direction)):
+                for j in range(self.layer):
+                    stdv = 1. / math.sqrt(self.W[i][j].size(1))
+                    self.W[i][j].data.uniform_(-stdv, stdv)
             
     def correlation(self, x):
         if len(x.shape) == 4:
@@ -60,7 +68,7 @@ class GNN(nn.Module):
         norm_x = Numerator_x / Denominator_x
         return norm_x
     
-    def init_Adjency_Degree_matrix2(self, x):
+    def init_Adjency_Degree_matrix2(self, x, _dir = None):
         if x.get_device() == -1:
             device = "cpu"
         else:
@@ -78,7 +86,11 @@ class GNN(nn.Module):
             num = x.shape[2] * x.shape[3]
             for i in range(num):
                 adjency_base = unfold(base).permute(0, 2, 1)
-                adjency_base[:, i, :] = 1
+                if _dir is None:
+                    adjency_base[:, i, :] = 1
+                else:
+                    adjency_base[:, i, _dir] = 1
+                adjency_base[:, i, adjency_base.shape[2] // 2] = 1
                 adjency_base = fold(adjency_base.permute(0, 2, 1))
                 adjency.append(adjency_base[:, :, 1 : -1, 1 : -1].reshape(x.shape[0], -1))
             adjency = torch.stack(adjency, dim = 1)
@@ -108,31 +120,51 @@ class GNN(nn.Module):
             D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
             self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
             
-    def forward(self, x):
-        
+    def __init_matrix__(self, x, _dir = None):
         batch, channel, height, width = x.shape
-        
         if self.channel_feature:
             x_linear = x.view(batch, channel, -1).permute(0, 2, 1)
             if self.grid_adjacency:
-                self.init_Adjency_Degree_matrix2(x)
+                self.init_Adjency_Degree_matrix2(x, _dir)
             else:
                 self.init_Adjency_Degree_matrix(x)
             
         else:
             x_linear = x.view(batch, channel, -1)
             self.init_Adjency_Degree_matrix(x)
-        
-        for i in range(self.layer):
-            lx = torch.bmm(self.laplacian, x_linear)
-            self._W = self.W[i].repeat(batch, 1, 1)
-            if self.bias is not None:
-                x_linear = torch.matmul(lx, self._W) + self.bias[i]
-            else:
-                x_linear = torch.matmul(lx, self._W)
-            x_linear = torch.nn.functional.instance_norm(x_linear)
-            x_linear = self.relu(x_linear)
+        return x_linear
             
+    def forward(self, x):
+        
+        if x.get_device() == -1:
+            device = "cpu"
+        else:
+            device = x.get_device()
+        
+        batch, channel, height, width = x.shape
+        if self.direction is None:
+            x_linear = self.__init_matrix__(x)
+            
+            for i in range(self.layer):
+                lx = torch.bmm(self.laplacian, x_linear)
+                self._W = self.W[i].repeat(batch, 1, 1)
+                x_linear = torch.matmul(lx, self._W)
+                x_linear = torch.nn.functional.instance_norm(x_linear)
+                x_linear = self.relu(x_linear)
+        else:
+            x_result = []
+            for step, _dir in enumerate(self.direction):
+                x_linear = self.__init_matrix__(x, _dir)
+                for i in range(self.layer):
+                    lx = torch.bmm(self.laplacian, x_linear)
+                    self._W = self.W[step][i].repeat(batch, 1, 1).to(device)
+                    x_linear = torch.matmul(lx, self._W)
+                    x_linear = torch.nn.functional.instance_norm(x_linear)
+                    x_linear = self.relu(x_linear)
+                
+                x_result.append(x_linear)
+            x_result = torch.stack(x_result, dim = 2)
+            x_linear = x_result.reshape(batch, x_result.shape[1], -1)                   
         return x_linear
     
 if __name__ == '__main__':
@@ -140,6 +172,6 @@ if __name__ == '__main__':
     a = torch.randn([1, 3, 4, 4]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([3,3,3], dist = 1, power = 1, grid_adjacency = True, channel_feature = True).cuda()
+    gnn = GNN([3,2,2], dist = 1, power = 1, grid_adjacency = True, channel_feature = True, direction = [0, 1, 2, 3]).cuda()
     
     a = gnn(a)
