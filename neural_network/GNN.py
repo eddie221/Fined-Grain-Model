@@ -34,7 +34,6 @@ class GNN(nn.Module):
             for i in range(0, len(direction)):
                 self.W.append(nn.ParameterList([]))
                 for j in range(1, len(feature)):
-                    print('i : {} j : {}'.format(i, j))
                     self.W[i].append(nn.Parameter(torch.randn(1, feature[j - 1], feature[j])))
         self.pad = nn.ReplicationPad2d(self.distance)
         
@@ -164,9 +163,8 @@ class GNN(nn.Module):
                 
                 x_result.append(x_linear)
             x_result = torch.stack(x_result, dim = 2)
-            x_linear = x_result.reshape(batch, x_result.shape[1], -1)        
-            
-        return self.correlation(x_linear)
+            x_linear = x_result.reshape(batch, x_result.shape[1], -1)                   
+        return x_linear
     
 if __name__ == '__main__':
     torch.manual_seed(0)
@@ -176,3 +174,4 @@ if __name__ == '__main__':
     gnn = GNN([3,2,2], dist = 1, power = 1, grid_adjacency = True, channel_feature = True, direction = [0, 1, 2, 3]).cuda()
     
     a = gnn(a)
+    print(a)
