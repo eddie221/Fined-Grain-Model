@@ -164,8 +164,9 @@ class GNN(nn.Module):
                 
                 x_result.append(x_linear)
             x_result = torch.stack(x_result, dim = 2)
-            x_linear = x_result.reshape(batch, x_result.shape[1], -1)                   
-        return x_linear
+            x_linear = x_result.reshape(batch, x_result.shape[1], -1)        
+            
+        return self.correlation(x_linear)
     
 if __name__ == '__main__':
     torch.manual_seed(0)
