@@ -64,12 +64,14 @@ class cofeature_fast(nn.Module):
 
         cofe = torch.stack(cofe)
         cofe = cofe.transpose(0,1)
+        #cofe = cofe.contiguous().view(cofe.shape[0], -1, cofe.shape[3])
         cofe = nn.functional.normalize(cofe, dim=-1)
-        weight = (self.raw_weight - torch.min(self.raw_weight)) / (torch.max(self.raw_weight) - torch.min(self.raw_weight))
-        return cofe * weight
+        return cofe
     
 if __name__ == '__main__':
     c = cofeature_fast()
-    a = torch.randn([1, 128, 14, 14])
-    print(c(a).shape)
-    
+    a = torch.randn([64, 128, 14, 14])
+    cofe = c(a)
+    print(cofe.shape)
+    g = GNN([16384, 2048, 1024], channel_feature = False)
+    gnn = g(cofe)

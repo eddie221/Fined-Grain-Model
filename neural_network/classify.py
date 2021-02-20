@@ -2,6 +2,7 @@ import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
 import torch
+from neural_network.cofe import cofeature_fast
 from neural_network.GNN import GNN
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
@@ -106,15 +107,12 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 2)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.gnn3 = GNN([128, 256, 512], dist = 1, power = 1, direction = [0, 1, 2, 3], grid_adjacency = True)
-        self.gnn_fc3 = self._construct_fc_layer([1024], 4 * 196 * 512)
-        
-        self.squeeze4 = nn.Conv2d(2048, 256, 1)
-        self.gnn4 = GNN([256, 512, 1024], dist = 1, power = 1, direction = [0, 1, 2, 3], grid_adjacency = True)
-        self.gnn_fc4 = self._construct_fc_layer([1024], 4 * 49 * 1024)
+        self.cofe3 = cofeature_fast(3)
+        self.gnn3 = GNN([16384, 2048, 1024], power = 1, channel_feature = False)
+        self.gnn_fc3 = self._construct_fc_layer([1024], 5 * 1024)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -187,17 +185,15 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x3 = self.gnn3(self.squeeze3(x))
+        x3 = self.cofe3(self.squeeze3(x))
+        x3 = self.gnn3(x3)
         x3 = x3.view(x3.shape[0], -1)
         x3 = self.gnn_fc3(x3)
         x = self.layer4(x)
-        x4 = self.gnn4(self.squeeze4(x))
-        x4 = x4.view(x4.shape[0], -1)
-        x4 = self.gnn_fc4(x4)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x3, x4], dim = 1)
+        x = torch.cat([x, x3], dim = 1)
         x = self.fc(x)
 
         return x
@@ -269,3 +265,4 @@ def resnet152(pretrained=False, **kwargs):
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
     return model
+
