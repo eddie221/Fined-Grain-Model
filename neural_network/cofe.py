@@ -69,9 +69,7 @@ class cofeature_fast(nn.Module):
         return cofe
     
 if __name__ == '__main__':
-    c = cofeature_fast()
+    c = cofeature_fast(3)
     a = torch.randn([64, 128, 14, 14])
     cofe = c(a)
     print(cofe.shape)
-    g = GNN([16384, 2048, 1024], channel_feature = False)
-    gnn = g(cofe)

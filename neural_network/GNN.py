@@ -52,9 +52,8 @@ class GNN(nn.Module):
             
         with torch.no_grad():
             cha_cor = self.correlation(x)
-            self.A = self.relu(cha_cor)
-            self.A = self.A - self.threshold
-            self.A = torch.nn.functional.relu(self.A)
+            self.A = cha_cor - self.threshold
+            self.A = self.relu(self.A)
             self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
             D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
             self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
@@ -80,9 +79,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([1, 128, 14, 14]).cuda()
+    a = torch.randn([1, 128, 16384]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([196, 225, 256], power = 1, channel_feature = False).cuda()
+    gnn = GNN([16384, 2048, 1024], power = 1, channel_feature = False).cuda()
     
     a = gnn(a)
