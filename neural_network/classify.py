@@ -111,7 +111,7 @@ class ResNet(nn.Module):
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe3 = cofeature_fast(3)
-        self.gnn3 = GNN([16384, 2048, 1024], power = 1, channel_feature = False)
+        self.gnn3 = GNN([16384, 2048, 1024], power = 2, channel_feature = False)
         self.gnn_fc3 = self._construct_fc_layer([1024], 5 * 1024)
         
         for m in self.modules():
