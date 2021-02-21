@@ -22,7 +22,7 @@ import tqdm
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
