@@ -19,6 +19,7 @@ class cofeature_fast(nn.Module):
         self.stride = stride
         self.dilate = dilate
         self.raw_weight = nn.Parameter(torch.randn(1, 5, 1))
+        self.layernorm = nn.LayerNorm((128, 1))
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
         
@@ -61,7 +62,7 @@ class cofeature_fast(nn.Module):
                     A = torch.sum(side_vector * side_vector, dim = 1, keepdims = True)
                     B = torch.sum(center_vector * center_vector, dim = 1, keepdims = True)
                     similarity = side_vector * center_vector / A / B
-                    
+                    similarity = self.layernorm(similarity)
                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity
                     cofeature = cofeature.view(batch, kernel_count, -1)
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
