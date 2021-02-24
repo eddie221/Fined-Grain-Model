@@ -59,13 +59,11 @@ class cofeature_fast(nn.Module):
                     side_vector_t = side_vector.permute(0, 2, 1)
                     
                     # calculate side_vector and center_vector similarity
-                    A = torch.sum(side_vector * side_vector, dim = 1, keepdims = True)
-                    B = torch.sum(center_vector * center_vector, dim = 1, keepdims = True)
-                    similarity = side_vector * center_vector / torch.sqrt(A) / torch.sqrt(B)
-                    similarity = self.layernorm(similarity)
-                    similarity = self.relu(similarity)
-                    similarity = torch.nn.functional.softmax(similarity, dim = -2)
-                    cofeature = torch.bmm(center_vector, side_vector_t) * similarity
+                    A = torch.sum(side_vector * side_vector, dim = 1, keepdims = False)
+                    B = torch.sum(center_vector * center_vector, dim = 1, keepdims = False)
+                    similarity = side_vector.squeeze(2) * center_vector.squeeze(2) / torch.sqrt(A) / torch.sqrt(B)
+                    similarity = torch.sum(similarity, dim = 1)
+                    cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
                     cofe.append(cofeature)
