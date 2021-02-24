@@ -63,6 +63,8 @@ class cofeature_fast(nn.Module):
                     B = torch.sum(center_vector * center_vector, dim = 1, keepdims = False)
                     similarity = side_vector.squeeze(2) * center_vector.squeeze(2) / torch.sqrt(A) / torch.sqrt(B)
                     similarity = torch.sum(similarity, dim = 1)
+                    similarity = self.relu(similarity)
+                    
                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
