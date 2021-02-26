@@ -111,8 +111,8 @@ class ResNet(nn.Module):
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe3 = cofeature_fast(3)
-        self.gnn3 = GNN([16384, 2048, 1024], power = 1, channel_feature = False)
-        self.gnn_fc3 = self._construct_fc_layer([1024], 5 * 1024)
+        self.cofe_squeeze3 = nn.Conv1d(5, 1, 1)
+        self.cofe_fc3 = self._construct_fc_layer([1024], 16384)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -186,9 +186,9 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x3 = self.cofe3(self.squeeze3(x))
-        x3 = self.gnn3(x3)
+        x3 = self.cofe_squeeze3(x3)
         x3 = x3.view(x3.shape[0], -1)
-        x3 = self.gnn_fc3(x3)
+        x3 = self.cofe_fc3(x3)
         x = self.layer4(x)
         
         x = self.avgpool(x)
