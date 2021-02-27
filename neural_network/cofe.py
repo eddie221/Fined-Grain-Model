@@ -70,9 +70,6 @@ class cofeature_fast(nn.Module):
                     
                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
-                    att = self.avg(cofeature).squeeze(2)
-                    att = self.SE(att).unsqueeze(2)
-                    cofeature = cofeature * att
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
                     cofe.append(cofeature)
 
