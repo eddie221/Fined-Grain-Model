@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Nov 28 14:25:04 2020
-
 @author: eddie
 """
 import torch.nn as nn
@@ -18,6 +17,8 @@ class cofeature_fast(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
+        self.layernorm = nn.LayerNorm((128, 1))
+        self.relu = nn.ReLU()
         self.avg = torch.nn.AdaptiveAvgPool1d(1)
         self.SE = nn.Sequential(nn.Linear(196, 98),
                                 nn.ReLU(),
@@ -60,12 +61,18 @@ class cofeature_fast(nn.Module):
                     side_vector = side_vector.contiguous().view(-1, channel, 1)
                     side_vector_t = side_vector.permute(0, 2, 1)
                     
-                    cofeature = torch.bmm(center_vector, side_vector_t)
+                    # calculate side_vector and center_vector similarity
+                    A = torch.sum(side_vector * side_vector, dim = 1, keepdims = False)
+                    B = torch.sum(center_vector * center_vector, dim = 1, keepdims = False)
+                    similarity = side_vector.squeeze(2) * center_vector.squeeze(2) / torch.sqrt(A) / torch.sqrt(B)
+                    similarity = torch.sum(similarity, dim = 1)
+                    similarity = self.relu(similarity)
+                    
+                    cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
                     att = self.avg(cofeature).squeeze(2)
                     att = self.SE(att).unsqueeze(2)
                     cofeature = cofeature * att
-                    
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
                     cofe.append(cofeature)
 
