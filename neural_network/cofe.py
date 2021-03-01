@@ -19,10 +19,6 @@ class cofeature_fast(nn.Module):
         self.dilate = dilate
         self.layernorm = nn.LayerNorm((128, 1))
         self.relu = nn.ReLU()
-        self.avg = torch.nn.AdaptiveAvgPool1d(1)
-        self.SE = nn.Sequential(nn.Linear(196, 98),
-                                nn.ReLU(),
-                                nn.Linear(98, 196))
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
         
