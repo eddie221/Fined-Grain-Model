@@ -17,16 +17,9 @@ class cofeature_fast(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
-        self.layernorm = nn.LayerNorm((128, 1))
         self.relu = nn.ReLU()
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
-        
-        self.SE = nn.Sequential(nn.Linear(16384, 2048),
-                                nn.ReLU(),
-                                nn.Linear(2048, 16384),
-                                nn.Sigmoid())
-        self.avg = nn.AdaptiveAvgPool1d(1)
         
     def forward(self, x, y = None):
         x = self.pad(x)
@@ -71,9 +64,7 @@ class cofeature_fast(nn.Module):
                     similarity = self.relu(similarity)
                     
                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
-                    se_att = self.SE(self.avg(cofeature.view(batch, -1, kernel_count)).view(batch, -1)).view(batch, 1, -1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
-                    cofeature = cofeature * se_att
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
                     cofe.append(cofeature)
 
@@ -87,4 +78,6 @@ if __name__ == '__main__':
     c = cofeature_fast(3)
     a = torch.randn([2, 128, 14, 14])
     cofe = c(a)
+    print(cofe.shape)
+    cofe = cofe[:, 0, :] * cofe[:, 1, :] * cofe[:, 2, :] * cofe[:, 3, :] * cofe[:, 4, :]
     print(cofe.shape)
