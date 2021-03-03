@@ -107,21 +107,12 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024 * 3)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe3 = cofeature_fast(3)
         self.cofe_squeeze3 = nn.Conv1d(5, 1, 1)
         self.cofe_fc3 = self._construct_fc_layer([1024], 16384)
-        
-        self.squeeze4 = nn.Conv2d(2048, 128, 1)
-        self.cofe4 = cofeature_fast(3)
-        self.cofe_squeeze4 = nn.Conv1d(5, 1, 1)
-        self.cofe_fc4 = self._construct_fc_layer([1024], 16384)
-        
-        self.cofe34 = cofeature_fast(3)
-        self.cofe_squeeze34 = nn.Conv1d(5, 1, 1)
-        self.cofe_fc34 = self._construct_fc_layer([1024], 16384)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -199,22 +190,11 @@ class ResNet(nn.Module):
         x3 = self.cofe_squeeze3(x3)
         x3 = x3.view(x3.shape[0], -1)
         x3 = self.cofe_fc3(x3)
-        
         x = self.layer4(x)
-        x4_o = torch.nn.functional.interpolate(x, size = x3_o.shape[2], mode = 'bilinear')
-        x4 = self.cofe4(self.squeeze4(x4_o))
-        x4 = self.cofe_squeeze4(x4)
-        x4 = x4.view(x4.shape[0], -1)
-        x4 = self.cofe_fc4(x4)
-        
-        x34 = self.cofe34(self.squeeze3(x3_o), self.squeeze4(x4_o))
-        x34 = self.cofe_squeeze34(x34)
-        x34 = x34.view(x34.shape[0], -1)
-        x34 = self.cofe_fc34(x34)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x3, x4, x34], dim = 1)
+        x = torch.cat([x, x3], dim = 1)
         x = self.fc(x)
 
         return x
