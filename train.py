@@ -18,11 +18,15 @@ import time
 from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX, KFOLD
 from sklearn.model_selection import KFold
 import tqdm
+import os
+
+if not os.path.exists('./pkl/{}/'.format(INDEX)):
+    os.mkdir('./pkl/{}/'.format(INDEX))
 #from torch.utils.tensorboard import SummaryWriter
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -249,7 +253,7 @@ def training(job):
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
-                        torch.save(save_data, './pkl/fold_{}_best_{}.pkl'.format(index, INDEX))
+                        torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
                         
     # =============================================================================
     #             if phase == "train":
