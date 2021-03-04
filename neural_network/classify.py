@@ -110,8 +110,9 @@ class ResNet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.cofe3 = cofeature_fast(3)
-        self.cofe_fc3 = self._construct_fc_layer([1024], 196 * 128)
+        self.squeeze4 = nn.Conv2d(2048, 128, 1)
+        self.cofe = cofeature_fast(3)
+        self.cofe_fc = self._construct_fc_layer([1024], 196 * 128)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -185,14 +186,14 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x3_o = x
-        x3 = self.cofe3(self.squeeze3(x3_o))
-        x3 = x3.view(x3.shape[0], -1)
-        x3 = self.cofe_fc3(x3)
         x = self.layer4(x)
+        cofe_f = self.cofe(self.squeeze3(x3_o), nn.functional.interpolate(self.squeeze4(x), size = x3_o.shape[2], mode = 'bilinear'))
+        cofe_f = cofe_f.view(cofe_f.shape[0], -1)
+        cofe_f = self.cofe_fc(cofe_f)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat([x, x3], dim = 1)
+        x = torch.cat([x, cofe_f], dim = 1)
         x = self.fc(x)
 
         return x
