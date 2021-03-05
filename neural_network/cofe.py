@@ -66,7 +66,7 @@ class cofeature_fast(nn.Module):
                     similarity = self.relu(similarity)
                     
                     # new cofe
-                    cofeature2 = (center_vector * side_vector).permute(0, 2, 1)
+                    cofeature2 = (center_vector * side_vector).permute(0, 2, 1) * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature2 = cofeature2.view(batch, kernel_count, -1)
                     cofe2.append(cofeature2)
                     
