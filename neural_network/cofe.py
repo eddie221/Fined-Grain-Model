@@ -17,7 +17,7 @@ class cofeature_fast(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
-        self.instance_norm = nn.InstanceNorm2d(5)
+        self.instance_norm = nn.InstanceNorm1d(196)
         self.relu = nn.ReLU()
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
@@ -42,9 +42,8 @@ class cofeature_fast(nn.Module):
 
         center_vector = torch.transpose(center_vector, 1, 2)
         center_vector = center_vector.contiguous().view(batch * kernel_count, channel, 1)
-        
-        cofe = []
-        cofe2 = []
+        cofeature2 = center_vector
+
         for y_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
             for x_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
                 #if (y_idx + self.kernel_size//2) * self.kernel_size + x_idx + self.kernel_size//2 <= self.kernel_size * self.kernel_size // 2:
@@ -64,12 +63,8 @@ class cofeature_fast(nn.Module):
                     similarity = side_vector.squeeze(2) * center_vector.squeeze(2) / torch.sqrt(A) / torch.sqrt(B)
                     similarity = torch.sum(similarity, dim = 1)
                     similarity = self.relu(similarity)
-                    
                     # new cofe
-                    cofeature2 = (center_vector * side_vector).permute(0, 2, 1) * similarity.unsqueeze(1).unsqueeze(1)
-                    cofeature2 = cofeature2.view(batch, kernel_count, -1)
-                    cofe2.append(cofeature2)
-                    
+                    cofeature2 = (cofeature2 * side_vector)
 # =============================================================================
 #                     # original cofe
 #                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
@@ -77,18 +72,19 @@ class cofeature_fast(nn.Module):
 #                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
 #                     cofe.append(cofeature)
 # =============================================================================
-        
-        cofe2 = torch.stack(cofe2)
-        cofe2 = cofe2.transpose(0,1)
-        cofe2 = self.instance_norm(cofe2)
-        cofe2 = cofe2[:, 0] * cofe2[:, 1] * cofe2[:, 2] * cofe2[:, 3] * cofe2[:, 4]
+        cofeature2 = cofeature2.view(batch, kernel_count, -1)
+        cofeature2 = self.instance_norm(cofeature2.permute(0, 2, 1))
+# =============================================================================
+#         cofe2 = cofe2.transpose(0,1)
+#         cofe2 = self.instance_norm(cofe2)
+# =============================================================================
 # =============================================================================
 #         cofe = torch.stack(cofe)
 #         cofe = cofe.transpose(0,1)
 #         #cofe = cofe.contiguous().view(cofe.shape[0], -1, cofe.shape[3])
 #         cofe = nn.functional.normalize(cofe, dim=-1)
 # =============================================================================
-        return cofe2
+        return cofeature2
     
 if __name__ == '__main__':
     c = cofeature_fast(3)
