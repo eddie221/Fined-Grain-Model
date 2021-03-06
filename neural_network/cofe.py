@@ -42,8 +42,8 @@ class cofeature_fast(nn.Module):
 
         center_vector = torch.transpose(center_vector, 1, 2)
         center_vector = center_vector.contiguous().view(batch * kernel_count, channel, 1)
-        cofeature2 = center_vector
 
+        cofe = []
         for y_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
             for x_idx in range(-(self.kernel_size//2 + self.dilate)+1, (self.kernel_size//2 + self.dilate - 1)+1, self.dilate):
                 #if (y_idx + self.kernel_size//2) * self.kernel_size + x_idx + self.kernel_size//2 <= self.kernel_size * self.kernel_size // 2:
@@ -63,28 +63,17 @@ class cofeature_fast(nn.Module):
                     similarity = side_vector.squeeze(2) * center_vector.squeeze(2) / torch.sqrt(A) / torch.sqrt(B)
                     similarity = torch.sum(similarity, dim = 1)
                     similarity = self.relu(similarity)
-                    # new cofe
-                    cofeature2 = (cofeature2 * side_vector)
-# =============================================================================
-#                     # original cofe
-#                     cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
-#                     cofeature = cofeature.view(batch, kernel_count, -1)
-#                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
-#                     cofe.append(cofeature)
-# =============================================================================
-        cofeature2 = cofeature2.view(batch, kernel_count, -1)
-        cofeature2 = self.instance_norm(cofeature2.permute(0, 2, 1))
-# =============================================================================
-#         cofe2 = cofe2.transpose(0,1)
-#         cofe2 = self.instance_norm(cofe2)
-# =============================================================================
-# =============================================================================
-#         cofe = torch.stack(cofe)
-#         cofe = cofe.transpose(0,1)
-#         #cofe = cofe.contiguous().view(cofe.shape[0], -1, cofe.shape[3])
-#         cofe = nn.functional.normalize(cofe, dim=-1)
-# =============================================================================
-        return cofeature2
+                    # original cofe
+                    cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
+                    cofeature = cofeature.view(batch, kernel_count, -1)
+                    cofeature = torch.sum(cofeature, dim=1, keepdim=False)
+                    cofe.append(cofeature)
+                    
+        cofe = torch.stack(cofe)
+        cofe = cofe.transpose(0,1)
+        #cofe = cofe.contiguous().view(cofe.shape[0], -1, cofe.shape[3])
+        cofe = nn.functional.normalize(cofe, dim=-1)
+        return cofe
     
 if __name__ == '__main__':
     c = cofeature_fast(3)

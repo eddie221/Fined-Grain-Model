@@ -110,9 +110,13 @@ class ResNet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.squeeze4 = nn.Conv2d(2048, 128, 1)
+        self.SE = nn.Sequential(nn.Linear(128, 32),
+                                nn.ReLU(),
+                                nn.Linear(32, 128),
+                                nn.Sigmoid())
+        self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
-        self.cofe_fc = self._construct_fc_layer([1024], 196 * 128)
+        self.cofe_fc = self._construct_fc_layer([1024], 16384)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -185,11 +189,14 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x3_o = x
-        x = self.layer4(x)
-        cofe_f = self.cofe(self.squeeze3(x3_o), nn.functional.interpolate(self.squeeze4(x), size = x3_o.shape[2], mode = 'bilinear'))
+        x3_o = self.squeeze3(x)
+        x3_avg = self.avgpool(x3_o)
+        x3_se = self.SE(x3_avg.squeeze(-1).squeeze(-1)).unsqueeze(-1).unsqueeze(-1) * x3_o
+        cofe_f = self.cofe(x3_se)
+        cofe_f = self.cofe_squeeze(cofe_f)
         cofe_f = cofe_f.view(cofe_f.shape[0], -1)
         cofe_f = self.cofe_fc(cofe_f)
+        x = self.layer4(x)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
