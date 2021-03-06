@@ -109,11 +109,10 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
+        self.refined_conv = nn.Conv2d(128, 256, 3, padding = 1)
+        self.refined_deconv = nn.ConvTranspose2d(256, 128, 3, padding = 1)
+        
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        self.SE = nn.Sequential(nn.Linear(128, 32),
-                                nn.ReLU(),
-                                nn.Linear(32, 128),
-                                nn.Sigmoid())
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
         self.cofe_fc = self._construct_fc_layer([1024], 16384)
@@ -180,6 +179,13 @@ class ResNet(nn.Module):
         cha_cor = (cha_cor - cha_cor_min) / (cha_cor_max - cha_cor_min)
         return cha_cor
     
+    def refined_feature(self, x):
+        for i in range(3):
+            x = self.refined_conv(x)
+            x = self.refined_deconv(x)
+            
+        return x
+    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -190,9 +196,8 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x3_o = self.squeeze3(x)
-        x3_avg = self.avgpool(x3_o)
-        x3_se = self.SE(x3_avg.squeeze(-1).squeeze(-1)).unsqueeze(-1).unsqueeze(-1) * x3_o
-        cofe_f = self.cofe(x3_se)
+        x3_refine = self.refined_feature(x3_o)
+        cofe_f = self.cofe(x3_refine)
         cofe_f = self.cofe_squeeze(cofe_f)
         cofe_f = cofe_f.view(cofe_f.shape[0], -1)
         cofe_f = self.cofe_fc(cofe_f)
