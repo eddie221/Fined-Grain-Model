@@ -180,10 +180,11 @@ class ResNet(nn.Module):
         return cha_cor
     
     def refined_feature(self, x):
+        ori_x = x
         for i in range(3):
             x = self.refined_conv(x)
             x = self.refined_deconv(x)
-            
+        x = x + ori_x
         return x
     
     def forward(self, x):
