@@ -184,7 +184,9 @@ class ResNet(nn.Module):
         for i in range(3):
             x = self.refined_conv(x)
             x = self.refined_deconv(x)
-        x = x + ori_x
+            
+        x = torch.nn.functional.sigmoid(x)
+        x = x * ori_x
         return x
     
     def forward(self, x):
