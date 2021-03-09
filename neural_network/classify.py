@@ -109,8 +109,12 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
-        self.refined_conv = nn.Conv2d(128, 256, 3, padding = 1)
-        self.refined_deconv = nn.ConvTranspose2d(256, 128, 3, padding = 1)
+        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
+                                          nn.BatchNorm2d(256),
+                                          nn.ReLU())
+        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(256, 128, 3, padding = 1),
+                                            nn.BatchNorm2d(128),
+                                            nn.ReLU())
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
