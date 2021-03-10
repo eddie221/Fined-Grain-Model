@@ -197,7 +197,7 @@ class ResNet(nn.Module):
     
     def refined_feature(self, x):
         ori_x = x
-        for i in range(3):
+        for i in range(5):
             x = self.refined_conv(x)
             x = self.refined_deconv(x)
             
