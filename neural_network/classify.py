@@ -114,14 +114,8 @@ class ResNet(nn.Module):
                                           nn.ReLU(),
                                           nn.Conv2d(256, 512, 3, padding = 1),
                                           nn.BatchNorm2d(512),
-                                          nn.ReLU(),
-                                          nn.Conv2d(512, 1024, 3, padding = 1),
-                                          nn.BatchNorm2d(1024),
                                           nn.ReLU())
-        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1024, 512, 3, padding = 1),
-                                            nn.BatchNorm2d(512),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(512, 256, 3, padding = 1),
+        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(512, 256, 3, padding = 1),
                                             nn.BatchNorm2d(256),
                                             nn.ReLU(),
                                             nn.ConvTranspose2d(256, 128, 3, padding = 1),
@@ -200,9 +194,9 @@ class ResNet(nn.Module):
         for i in range(5):
             x = self.refined_conv(x)
             x = self.refined_deconv(x)
+            x = torch.sigmoid(x)
+            x = x * ori_x
             
-        x = torch.sigmoid(x)
-        x = x * ori_x
         return x
     
     def forward(self, x):
