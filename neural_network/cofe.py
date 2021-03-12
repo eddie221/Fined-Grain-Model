@@ -19,6 +19,13 @@ class cofeature_fast(nn.Module):
         self.dilate = dilate
         self.instance_norm = nn.InstanceNorm1d(196)
         self.relu = nn.ReLU()
+        self.refined_conv = nn.Sequential(nn.Conv2d(196, 1, 3, padding = 1),
+                                          nn.BatchNorm2d(1),
+                                          nn.ReLU()
+                                         )
+        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1, 196, 3, padding = 1),
+                                            nn.BatchNorm2d(196),
+                                            nn.ReLU())
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)
         
@@ -64,7 +71,12 @@ class cofeature_fast(nn.Module):
                     similarity = torch.sum(similarity, dim = 1)
                     similarity = self.relu(similarity)
                     # original cofe
-                    cofeature = torch.bmm(center_vector, side_vector_t) * similarity.unsqueeze(1).unsqueeze(1)
+                    cofeature = torch.bmm(center_vector, side_vector_t).reshape(batch, -1, center_vector.shape[1], center_vector.shape[1])
+                    cofeature = self.refined_conv(cofeature)
+                    cofeature = self.refined_deconv(cofeature).squeeze(1)
+                    cofeature = cofeature.reshape(-1, center_vector.shape[1], center_vector.shape[1])
+
+                    cofeature = cofeature * similarity.unsqueeze(1).unsqueeze(1)
                     cofeature = cofeature.view(batch, kernel_count, -1)
                     cofeature = torch.sum(cofeature, dim=1, keepdim=False)
                     cofe.append(cofeature)
