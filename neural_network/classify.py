@@ -109,18 +109,32 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
-        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
+        self.refined_conv3 = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
                                           nn.BatchNorm2d(256),
                                           nn.ReLU(),
                                           nn.Conv2d(256, 512, 3, padding = 1),
                                           nn.BatchNorm2d(512),
                                           nn.ReLU())
-        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(512, 256, 3, padding = 1),
+        self.refined_conv5 = nn.Sequential(nn.Conv2d(128, 256, 5, padding = 2),
+                                          nn.BatchNorm2d(256),
+                                          nn.ReLU(),
+                                          nn.Conv2d(256, 512, 5, padding = 2),
+                                          nn.BatchNorm2d(512),
+                                          nn.ReLU())
+        self.refined_deconv3 = nn.Sequential(nn.ConvTranspose2d(512, 256, 3, padding = 1),
                                             nn.BatchNorm2d(256),
                                             nn.ReLU(),
                                             nn.ConvTranspose2d(256, 128, 3, padding = 1),
                                             nn.BatchNorm2d(128),
                                             nn.ReLU())
+        self.refined_deconv5 = nn.Sequential(nn.ConvTranspose2d(512, 256, 5, padding = 2),
+                                            nn.BatchNorm2d(256),
+                                            nn.ReLU(),
+                                            nn.ConvTranspose2d(256, 128, 5, padding = 2),
+                                            nn.BatchNorm2d(128),
+                                            nn.ReLU())
+        self.refine_squeeze = nn.Conv2d(256, 128, 1)
+        
         
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
@@ -191,11 +205,17 @@ class ResNet(nn.Module):
     
     def refined_feature(self, x):
         ori_x = x
+        x3 = x
+        x5 = x
         for i in range(5):
-            x = self.refined_conv(x)
-            x = self.refined_deconv(x)
-            x = torch.sigmoid(x)
-            x = x * ori_x
+            x3 = self.refined_conv3(x3)
+            x3 = self.refined_deconv3(x3)
+            
+            x5 = self.refined_conv5(x5)
+            x5 = self.refined_deconv5(x5)
+            
+        x = torch.sigmoid(self.refine_squeeze(torch.cat([x3, x5], dim = 1)))
+        x = x * ori_x
             
         return x
     
