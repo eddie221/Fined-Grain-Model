@@ -128,6 +128,12 @@ class ResNet(nn.Module):
                                             nn.BatchNorm2d(128),
                                             nn.ReLU())
         
+        self.SE_avg = nn.AdaptiveAvgPool2d(1)
+        self.SE = nn.Sequential(nn.Linear(128, 16),
+                                nn.ReLU(),
+                                nn.Linear(16, 128),
+                                nn.Sigmoid())
+        
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
@@ -202,7 +208,11 @@ class ResNet(nn.Module):
             x = self.refined_deconv(x)
             
         x = torch.sigmoid(x)
-        x = x * ori_x + ori_x
+        x = x * ori_x
+        
+        x_se = self.SE_avg(x).view(x.shape[0], -1)
+        x_se = self.SE(x_se)
+        x = x_se.unsqueeze(-1).unsqueeze(-1) * ori_x
         
         return x
     
