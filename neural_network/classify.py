@@ -202,7 +202,8 @@ class ResNet(nn.Module):
             x = self.refined_deconv(x)
             
         x = torch.sigmoid(x)
-        x = x * ori_x
+        x = x * ori_x + ori_x
+        
         return x
     
     def forward(self, x):
