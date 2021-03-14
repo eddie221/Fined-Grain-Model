@@ -109,31 +109,6 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
-        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
-                                          nn.BatchNorm2d(256),
-                                          nn.ReLU(),
-                                          nn.Conv2d(256, 512, 3, padding = 1),
-                                          nn.BatchNorm2d(512),
-                                          nn.ReLU(),
-                                          nn.Conv2d(512, 1024, 3, padding = 1),
-                                          nn.BatchNorm2d(1024),
-                                          nn.ReLU())
-        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1024, 512, 3, padding = 1),
-                                            nn.BatchNorm2d(512),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(512, 256, 3, padding = 1),
-                                            nn.BatchNorm2d(256),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(256, 128, 3, padding = 1),
-                                            nn.BatchNorm2d(128),
-                                            nn.ReLU())
-        
-        self.SE_avg = nn.AdaptiveAvgPool2d(1)
-        self.SE = nn.Sequential(nn.Linear(128, 16),
-                                nn.ReLU(),
-                                nn.Linear(16, 128),
-                                nn.Sigmoid())
-        
         self.squeeze3 = nn.Conv2d(1024, 128, 1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
@@ -203,16 +178,19 @@ class ResNet(nn.Module):
     
     def refined_feature(self, x):
         ori_x = x
-        for i in range(5):
-            x = self.refined_conv(x)
-            x = self.refined_deconv(x)
+        cell_state = torch.randn(x.shape).to(x.device)
+        hidden_state = torch.randn(x.shape).to(x.device)
+        for i in range(3):
+            forget_gate = torch.sigmoid(hidden_state + x)
+            input_gate = forget_gate.clone()
+            output_gate = forget_gate.clone()
+            memory_gate = torch.tanh(hidden_state + x)
+            cell_state = forget_gate * cell_state
+            cell_state = cell_state + input_gate * memory_gate
+            hiddent_state = torch.tanh(cell_state) * output_gate
             
-        x = torch.sigmoid(x)
-        x = x * ori_x
-        
-        x_se = self.SE_avg(x).view(x.shape[0], -1)
-        x_se = self.SE(x_se)
-        x = x_se.unsqueeze(-1).unsqueeze(-1) * ori_x
+        x = torch.sigmoid(hiddent_state)
+        x = x * ori_x + ori_x
         
         return x
     
