@@ -109,26 +109,15 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
-        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
-                                          nn.BatchNorm2d(256),
-                                          nn.ReLU(),
-                                          nn.Conv2d(256, 512, 3, padding = 1),
-                                          nn.BatchNorm2d(512),
-                                          nn.ReLU(),
-                                          nn.Conv2d(512, 1024, 3, padding = 1),
-                                          nn.BatchNorm2d(1024),
-                                          nn.ReLU())
-        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1024, 512, 3, padding = 1),
-                                            nn.BatchNorm2d(512),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(512, 256, 3, padding = 1),
-                                            nn.BatchNorm2d(256),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(256, 128, 3, padding = 1),
-                                            nn.BatchNorm2d(128),
-                                            nn.ReLU())
+        self.squeeze = nn.Sequential(nn.Conv2d(512 + 1024 + 2048, 1024, 1),
+                                     nn.ReLU(),
+                                     nn.Conv2d(1024, 128, 1)
+                                     )
         
-        self.squeeze3 = nn.Conv2d(1024, 128, 1)
+        self.attention = nn.Sequential(nn.Conv2d(128, 16, 1),
+                                       nn.ReLU(),
+                                       nn.Conv2d(16, 128, 1))
+        
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
         self.cofe_fc = self._construct_fc_layer([1024], 16384)
@@ -215,6 +204,14 @@ class ResNet(nn.Module):
         
         return x
     
+    def fusion_attention(self, x2, x3, x4):
+        x2 = torch.nn.functional.interpolate(x2, size = x3.shape[2], mode = 'bilinear', align_corners = False)
+        x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = False)
+        x_fusion = self.squeeze(torch.cat([x2, x3, x4], dim = 1))
+        x_att = self.attention(x_fusion)
+        x_fusion =  x_att * x_fusion
+        return x_fusion
+        
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -223,14 +220,17 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
+        x2 = x
         x = self.layer3(x)
-        x3_o = self.squeeze3(x)
-        x3_refine = self.refined_feature(x3_o)
-        cofe_f = self.cofe(x3_refine)
+        x3 = x
+        x = self.layer4(x)
+        x4 = x
+        
+        x_fusion = self.fusion_attention(x2, x3, x4)
+        cofe_f = self.cofe(x_fusion)
         cofe_f = self.cofe_squeeze(cofe_f)
         cofe_f = cofe_f.view(cofe_f.shape[0], -1)
         cofe_f = self.cofe_fc(cofe_f)
-        x = self.layer4(x)
         
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
