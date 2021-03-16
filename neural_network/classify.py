@@ -209,6 +209,7 @@ class ResNet(nn.Module):
         x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = False)
         x_fusion = self.squeeze(torch.cat([x2, x3, x4], dim = 1))
         x_att = self.attention(x_fusion)
+        x_att = torch.sigmoid(x_att)
         x_fusion =  x_att * x_fusion
         return x_fusion
         
