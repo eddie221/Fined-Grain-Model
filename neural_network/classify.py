@@ -109,6 +109,25 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
         
+        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
+                                          nn.BatchNorm2d(256),
+                                          nn.ReLU(),
+                                          nn.Conv2d(256, 512, 3, padding = 1),
+                                          nn.BatchNorm2d(512),
+                                          nn.ReLU(),
+                                          nn.Conv2d(512, 1024, 3, padding = 1),
+                                          nn.BatchNorm2d(1024),
+                                          nn.ReLU())
+        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1024, 512, 3, padding = 1),
+                                            nn.BatchNorm2d(512),
+                                            nn.ReLU(),
+                                            nn.ConvTranspose2d(512, 256, 3, padding = 1),
+                                            nn.BatchNorm2d(256),
+                                            nn.ReLU(),
+                                            nn.ConvTranspose2d(256, 128, 3, padding = 1),
+                                            nn.BatchNorm2d(128),
+                                            nn.ReLU())
+        
         self.squeeze = nn.Sequential(nn.Conv2d(512 + 1024 + 2048, 1024, 1),
                                      nn.ReLU(),
                                      nn.Conv2d(1024, 128, 1)
@@ -118,8 +137,6 @@ class ResNet(nn.Module):
                                        nn.ReLU(),
                                        nn.Conv2d(16, 128, 1))
         
-        self.fusion_squeeze1 = nn.Conv2d(128 + 5, 128, 1)
-        self.cofe_avgpool = nn.AdaptiveAvgPool1d(1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
         self.cofe_fc = self._construct_fc_layer([1024], 16384)
@@ -188,20 +205,11 @@ class ResNet(nn.Module):
     
     def refined_feature(self, x):
         ori_x = x
-        cell_state = torch.randn(x.shape).to(x.device)
-        hidden_state = torch.randn(x.shape).to(x.device)
         for i in range(3):
             x = self.refined_conv(x)
             x = self.refined_deconv(x)
-            forget_gate = torch.sigmoid(hidden_state + x)
-            input_gate = forget_gate.clone()
-            output_gate = forget_gate.clone()
-            memory_gate = torch.tanh(hidden_state + x)
-            cell_state = forget_gate * cell_state
-            cell_state = cell_state + input_gate * memory_gate
-            hiddent_state = torch.tanh(cell_state) * output_gate
             
-        x = torch.sigmoid(hiddent_state)
+        x = torch.sigmoid(x)
         x = x * ori_x + ori_x
         
         return x
@@ -230,12 +238,8 @@ class ResNet(nn.Module):
         x4 = x
         
         x_fusion = self.fusion_attention(x2, x3, x4)
-        cofe_f1 = self.cofe(x_fusion)
-        cofe_f1 = self.cofe_avgpool(cofe_f1)
-        cofe_f1 = cofe_f1.unsqueeze(-1).expand(x3.shape[0], -1, x3.shape[2], x3.shape[3])
-        x_fusion2 = self.fusion_squeeze1(torch.cat([x_fusion, cofe_f1], dim = 1))
-        
-        cofe_f = self.cofe(x_fusion2)
+        x_fusion = self.refined_feature(x_fusion)
+        cofe_f = self.cofe(x_fusion)
         cofe_f = self.cofe_squeeze(cofe_f)
         cofe_f = cofe_f.view(cofe_f.shape[0], -1)
         cofe_f = self.cofe_fc(cofe_f)
