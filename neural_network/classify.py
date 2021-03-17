@@ -118,6 +118,8 @@ class ResNet(nn.Module):
                                        nn.ReLU(),
                                        nn.Conv2d(16, 128, 1))
         
+        self.fusion_squeeze1 = nn.Conv2d(128 + 5, 128, 1)
+        self.cofe_avgpool = nn.AdaptiveAvgPool1d(1)
         self.cofe_squeeze = nn.Conv1d(5, 1, 1)
         self.cofe = cofeature_fast(3)
         self.cofe_fc = self._construct_fc_layer([1024], 16384)
@@ -228,7 +230,12 @@ class ResNet(nn.Module):
         x4 = x
         
         x_fusion = self.fusion_attention(x2, x3, x4)
-        cofe_f = self.cofe(x_fusion)
+        cofe_f1 = self.cofe(x_fusion)
+        cofe_f1 = self.cofe_avgpool(cofe_f1)
+        cofe_f1 = cofe_f1.unsqueeze(-1).expand(x3.shape[0], -1, x3.shape[2], x3.shape[3])
+        x_fusion2 = self.fusion_squeeze1(torch.cat([x_fusion, cofe_f1], dim = 1))
+        
+        cofe_f = self.cofe(x_fusion2)
         cofe_f = self.cofe_squeeze(cofe_f)
         cofe_f = cofe_f.view(cofe_f.shape[0], -1)
         cofe_f = self.cofe_fc(cofe_f)
