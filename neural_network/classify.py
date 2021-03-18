@@ -16,6 +16,20 @@ model_urls = {
     'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
 }
 
+class lateral_connect(nn.Module):
+
+    def __init__(self, input_channel, output_channel):
+        super(lateral_connect, self).__init__()
+        self.lateral = nn.Conv2d(input_channel, output_channel, kernel_size=1)
+        self.append_conv = nn.Conv2d(output_channel, output_channel, kernel_size=3, stride=1, padding=1)
+    
+    def upsample_and_add(self, target, small):
+        n, c, h, w = target.size()
+        return torch.nn.functional.interpolate(small, size=(h, w), mode='bilinear', align_corners=True) + target
+    
+    def forward(self, bottom_up, top_down):
+        return self.append_conv(self.upsample_and_add(self.lateral(bottom_up), top_down))
+
 def conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
@@ -107,39 +121,12 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion + 1024)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.refined_conv = nn.Sequential(nn.Conv2d(128, 256, 3, padding = 1),
-                                          nn.BatchNorm2d(256),
-                                          nn.ReLU(),
-                                          nn.Conv2d(256, 512, 3, padding = 1),
-                                          nn.BatchNorm2d(512),
-                                          nn.ReLU(),
-                                          nn.Conv2d(512, 1024, 3, padding = 1),
-                                          nn.BatchNorm2d(1024),
-                                          nn.ReLU())
-        self.refined_deconv = nn.Sequential(nn.ConvTranspose2d(1024, 512, 3, padding = 1),
-                                            nn.BatchNorm2d(512),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(512, 256, 3, padding = 1),
-                                            nn.BatchNorm2d(256),
-                                            nn.ReLU(),
-                                            nn.ConvTranspose2d(256, 128, 3, padding = 1),
-                                            nn.BatchNorm2d(128),
-                                            nn.ReLU())
-        
-        self.squeeze = nn.Sequential(nn.Conv2d(512 + 1024 + 2048, 1024, 1),
-                                     nn.ReLU(),
-                                     nn.Conv2d(1024, 128, 1)
-                                     )
-        
-        self.attention = nn.Sequential(nn.Conv2d(128, 16, 1),
-                                       nn.ReLU(),
-                                       nn.Conv2d(16, 128, 1))
-        
-        self.cofe_squeeze = nn.Conv1d(5, 1, 1)
-        self.cofe = cofeature_fast(3)
-        self.cofe_fc = self._construct_fc_layer([1024], 16384)
+        self.top = nn.Conv2d(2048, 256, kernel_size=1)
+        self.lateral1 = lateral_connect(1024, 256)
+        self.lateral2 = lateral_connect( 512, 256)
+        self.lateral3 = lateral_connect( 256, 256)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -194,34 +181,11 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
     
-    def channel_correlation(self, x):
-        b, c, h, w = x.shape
-        x_flatten = x.view(b, c, -1)
-        cha_cor = self.relu(torch.bmm(x_flatten, x_flatten.permute(0, 2, 1)))
-        cha_cor_max, max_index = torch.max(cha_cor, dim = 1, keepdim = True)
-        cha_cor_min, min_index = torch.min(cha_cor, dim = 1, keepdim = True)
-        cha_cor = (cha_cor - cha_cor_min) / (cha_cor_max - cha_cor_min)
-        return cha_cor
-    
-    def refined_feature(self, x):
-        ori_x = x
-        for i in range(3):
-            x = self.refined_conv(x)
-            x = self.refined_deconv(x)
-            
-        x = torch.sigmoid(x)
-        x = x * ori_x + ori_x
-        
-        return x
-    
-    def fusion_attention(self, x2, x3, x4):
-        x2 = torch.nn.functional.interpolate(x2, size = x3.shape[2], mode = 'bilinear', align_corners = False)
-        x4 = torch.nn.functional.interpolate(x4, size = x3.shape[2], mode = 'bilinear', align_corners = False)
-        x_fusion = self.squeeze(torch.cat([x2, x3, x4], dim = 1))
-        x_att = self.attention(x_fusion)
-        x_att = torch.sigmoid(x_att)
-        x_fusion =  x_att * x_fusion
-        return x_fusion
+    def FPN(self, x2, x3, x4):
+        x4 = self.top(x4)
+        x3 = self.lateral1(x3, x4)
+        x2 = self.lateral2(x2, x3)
+        return x2
         
     def forward(self, x):
         x = self.conv1(x)
@@ -236,20 +200,17 @@ class ResNet(nn.Module):
         x3 = x
         x = self.layer4(x)
         x4 = x
+        fpn1 = self.FPN(x2, x3, x4)
         
-        x_fusion = self.fusion_attention(x2, x3, x4)
-        x_fusion = self.refined_feature(x_fusion)
-        cofe_f = self.cofe(x_fusion)
-        cofe_f = self.cofe_squeeze(cofe_f)
-        cofe_f = cofe_f.view(cofe_f.shape[0], -1)
-        cofe_f = self.cofe_fc(cofe_f)
+        fpn1 = self.layer2(fpn1)
+        fpn1 = self.layer3(fpn1)
+        fpn1 = self.layer4(fpn1)
         
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = torch.cat([x, cofe_f], dim = 1)
-        x = self.fc(x)
+        fpn1 = self.avgpool(fpn1)
+        fpn1 = fpn1.view(fpn1.shape[0], -1)
+        fpn1 = self.fc(fpn1)
 
-        return x
+        return fpn1
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
