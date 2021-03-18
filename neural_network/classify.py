@@ -123,10 +123,14 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.top = nn.Conv2d(2048, 256, kernel_size=1)
-        self.lateral1 = lateral_connect(1024, 256)
-        self.lateral2 = lateral_connect( 512, 256)
-        self.lateral3 = lateral_connect( 256, 256)
+        self.top = nn.Conv2d(2048, 512, kernel_size=1)
+        self.lateral1 = lateral_connect(1024, 512)
+        self.lateral2 = lateral_connect( 512, 512)
+        
+        self.predict = nn.Sequential(nn.Conv2d(512, 512, kernel_size = 3, padding = 1),
+                                     nn.BatchNorm2d(512),
+                                     nn.Conv2d(512, num_classes, 1)
+                                     )
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -182,10 +186,10 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
     
     def FPN(self, x2, x3, x4):
-        x4 = self.top(x4)
-        x3 = self.lateral1(x3, x4)
-        x2 = self.lateral2(x2, x3)
-        return x2
+        p4 = self.top(x4)
+        p3 = self.lateral1(x3, p4)
+        p2 = self.lateral2(x2, p3)
+        return p2, p3, p4
         
     def forward(self, x):
         x = self.conv1(x)
@@ -200,17 +204,19 @@ class ResNet(nn.Module):
         x3 = x
         x = self.layer4(x)
         x4 = x
-        fpn1 = self.FPN(x2, x3, x4)
+        p2, p3, p4 = self.FPN(x2, x3, x4)
         
-        fpn1 = self.layer2(fpn1)
-        fpn1 = self.layer3(fpn1)
-        fpn1 = self.layer4(fpn1)
+        p2 = self.predict(p2)
+        p3 = self.predict(p3)
+        p4 = self.predict(p4)
         
-        fpn1 = self.avgpool(fpn1)
-        fpn1 = fpn1.view(fpn1.shape[0], -1)
-        fpn1 = self.fc(fpn1)
-
-        return fpn1
+        p2 = self.avgpool(p2).view(p2.shape[0], -1)
+        p3 = self.avgpool(p3).view(p3.shape[0], -1)
+        p4 = self.avgpool(p4).view(p4.shape[0], -1)
+        
+        
+        
+        return p2 + p3 + p4
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
