@@ -216,7 +216,7 @@ class ResNet(nn.Module):
         
         
         
-        return p2 + p3 + p4
+        return p2, p3, p4
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
