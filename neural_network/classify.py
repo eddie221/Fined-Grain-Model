@@ -123,13 +123,14 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.top = nn.Conv2d(2048, 512, kernel_size=1)
-        self.lateral1 = lateral_connect(1024, 512)
-        self.lateral2 = lateral_connect( 512, 512)
+        self.FPN_feature = 512
+        self.top = nn.Conv2d(2048, self.FPN_feature, kernel_size=1)
+        self.lateral1 = lateral_connect(1024, self.FPN_feature)
+        self.lateral2 = lateral_connect( 512, self.FPN_feature)
         
-        self.predict = nn.Sequential(nn.Conv2d(512, 512, kernel_size = 3, padding = 1),
-                                     nn.BatchNorm2d(512),
-                                     nn.Conv2d(512, num_classes, 1)
+        self.predict = nn.Sequential(nn.Conv2d(self.FPN_feature, self.FPN_feature, kernel_size = 3, padding = 1),
+                                     nn.BatchNorm2d(self.FPN_feature),
+                                     nn.Conv2d(self.FPN_feature, num_classes, 1)
                                      )
         
         for m in self.modules():
@@ -221,7 +222,7 @@ class ResNet(nn.Module):
         x4 = x4.view(x4.shape[0], -1)
         x4 = self.fc(x4)
         
-        return x4, p2, p3, p4
+        return p2, p3, p4
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
