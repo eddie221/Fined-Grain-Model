@@ -123,7 +123,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.FPN_feature = 512
+        self.FPN_feature = 128
         self.top = nn.Conv2d(2048, self.FPN_feature, kernel_size=1)
         self.lateral1 = lateral_connect(1024, self.FPN_feature)
         self.lateral2 = lateral_connect( 512, self.FPN_feature)
@@ -132,6 +132,11 @@ class ResNet(nn.Module):
                                      nn.BatchNorm2d(self.FPN_feature),
                                      nn.Conv2d(self.FPN_feature, num_classes, 1)
                                      )
+        
+        self.cofe = cofeature_fast(3)
+        self.cofe_squeeze4 = nn.Conv1d(5, 1, 1)
+        
+        self.cofe_fc4 = self._construct_fc_layer([self.FPN_feature], self.FPN_feature * self.FPN_feature)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -188,7 +193,13 @@ class ResNet(nn.Module):
     
     def FPN(self, x2, x3, x4):
         p4 = self.top(x4)
+        cofe_p4 = self.cofe(p4)
+        cofe_p4 = self.cofe_squeeze4(cofe_p4).view(cofe_p4.shape[0], -1)
+        cofe_p4 = self.cofe_fc4(cofe_p4).unsqueeze(-1).unsqueeze(-1)
+        p4 = cofe_p4 + p4
+        
         p3 = self.lateral1(x3, p4)
+        
         p2 = self.lateral2(x2, p3)
         return p2, p3, p4
         
@@ -207,9 +218,6 @@ class ResNet(nn.Module):
         x4 = x
         p2, p3, p4 = self.FPN(x2, x3, x4)
         
-        x3 = self.layer3(p2)
-        x4 = self.layer4(x3)
-        
         p2 = self.predict(p2)
         p3 = self.predict(p3)
         p4 = self.predict(p4)
@@ -217,10 +225,6 @@ class ResNet(nn.Module):
         p2 = self.avgpool(p2).view(p2.shape[0], -1)
         p3 = self.avgpool(p3).view(p3.shape[0], -1)
         p4 = self.avgpool(p4).view(p4.shape[0], -1)
-        
-        x4 = self.avgpool(x4)
-        x4 = x4.view(x4.shape[0], -1)
-        x4 = self.fc(x4)
         
         return p2, p3, p4
 
