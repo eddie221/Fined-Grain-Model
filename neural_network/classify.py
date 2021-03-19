@@ -206,6 +206,9 @@ class ResNet(nn.Module):
         x4 = x
         p2, p3, p4 = self.FPN(x2, x3, x4)
         
+        x3 = self.layer3(p2)
+        x4 = self.layer4(x3)
+        
         p2 = self.predict(p2)
         p3 = self.predict(p3)
         p4 = self.predict(p4)
@@ -214,9 +217,11 @@ class ResNet(nn.Module):
         p3 = self.avgpool(p3).view(p3.shape[0], -1)
         p4 = self.avgpool(p4).view(p4.shape[0], -1)
         
+        x4 = self.avgpool(x4)
+        x4 = x4.view(x4.shape[0], -1)
+        x4 = self.fc(x4)
         
-        
-        return p2, p3, p4
+        return x4, p2, p3, p4
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.

@@ -26,7 +26,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -181,10 +181,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     output_1 = model(b_data)
-    _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data, 1)
+    _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data + output_1[3].data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)# + loss_func[0](output_2, b_label)
+    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
     
     if phase == 'train':
