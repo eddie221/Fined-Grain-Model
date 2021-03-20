@@ -26,7 +26,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -115,7 +115,8 @@ def create_opt_loss(model):
     set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[15, 30, 45], gamma=0.1),
                         ]
     
-    loss_func = [torch.nn.CrossEntropyLoss()]
+    loss_func = [torch.nn.CrossEntropyLoss(),
+                 torch.nn.MSELoss()]
     optimizer_select = 'Adam'
     loss_function_select = 'crossentropy'
     return optimizer, set_lr_secheduler, loss_func
@@ -180,12 +181,13 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     for optimizer in optimizers:
         optimizer.zero_grad() 
-    output_1 = model(b_data)
+    output_1, p2_f, x2 = model(b_data)
     _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data, 1)
     
     #loss function
     cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
-    loss = cls_loss
+    mse_loss = loss_func[1](p2_f, x2)
+    loss = cls_loss + mse_loss
     
     if phase == 'train':
         loss.backward()

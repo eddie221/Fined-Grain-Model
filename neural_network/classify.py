@@ -209,23 +209,24 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
 
         x = self.layer1(x)
+        x1 = x
         x = self.layer2(x)
         x2 = x
         x = self.layer3(x)
         x3 = x
         x = self.layer4(x)
         x4 = x
-        p2, p3, p4 = self.FPN(x2, x3, x4)
+        p2_f, p3_f, p4_f = self.FPN(x2, x3, x4)
         
-        p2 = self.predict(p2)
-        p3 = self.predict(p3)
-        p4 = self.predict(p4)
+        p2 = self.predict(p2_f)
+        p3 = self.predict(p3_f)
+        p4 = self.predict(p4_f)
         
         p2 = self.avgpool(p2).view(p2.shape[0], -1)
         p3 = self.avgpool(p3).view(p3.shape[0], -1)
         p4 = self.avgpool(p4).view(p4.shape[0], -1)
         
-        return p2, p3, p4
+        return (p2, p3, p4), torch.nn.functional.interpolate(p2_f, size = x1.shape[2], mode = 'bilinear', align_corners = False), x1
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
