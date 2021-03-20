@@ -123,7 +123,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.FPN_feature = 128
+        self.FPN_feature = 256
         self.top = nn.Conv2d(2048, self.FPN_feature, kernel_size=1)
         self.lateral1 = lateral_connect(1024, self.FPN_feature)
         self.lateral2 = lateral_connect( 512, self.FPN_feature)
@@ -134,10 +134,8 @@ class ResNet(nn.Module):
                                      )
         
         self.cofe = cofeature_fast(3)
-        self.cofe_squeeze3 = nn.Conv1d(5, 1, 1)
         self.cofe_squeeze4 = nn.Conv1d(5, 1, 1)
         
-        self.cofe_fc3 = self._construct_fc_layer([self.FPN_feature], self.FPN_feature * self.FPN_feature)
         self.cofe_fc4 = self._construct_fc_layer([self.FPN_feature], self.FPN_feature * self.FPN_feature)
         
         for m in self.modules():
@@ -201,11 +199,6 @@ class ResNet(nn.Module):
         p4 = cofe_p4 + p4
         
         p3 = self.lateral1(x3, p4)
-        cofe_p3 = self.cofe(p3)
-        cofe_p3 = self.cofe_squeeze3(cofe_p3).view(cofe_p3.shape[0], -1)
-        cofe_p3 = self.cofe_fc3(cofe_p3).unsqueeze(-1).unsqueeze(-1)
-        p3 = cofe_p3 + p3
-        
         p2 = self.lateral2(x2, p3)
         return p2, p3, p4
         
