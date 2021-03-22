@@ -123,7 +123,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
-        self.FPN_feature = 256
+        self.FPN_feature = 64
         self.top = nn.Conv2d(2048, self.FPN_feature, kernel_size=1)
         self.lateral1 = lateral_connect(1024, self.FPN_feature)
         self.lateral2 = lateral_connect( 512, self.FPN_feature)
@@ -207,7 +207,7 @@ class ResNet(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-
+        x0 = x
         x = self.layer1(x)
         x1 = x
         x = self.layer2(x)
@@ -226,7 +226,7 @@ class ResNet(nn.Module):
         p3 = self.avgpool(p3).view(p3.shape[0], -1)
         p4 = self.avgpool(p4).view(p4.shape[0], -1)
         
-        return (p2, p3, p4), torch.nn.functional.interpolate(p2_f, size = x1.shape[2], mode = 'bilinear', align_corners = False), x1
+        return (p2, p3, p4), torch.nn.functional.interpolate(p2_f, size = x0.shape[2], mode = 'bilinear', align_corners = False), x1
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
