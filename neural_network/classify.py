@@ -226,7 +226,7 @@ class ResNet(nn.Module):
         p3 = self.avgpool(p3).view(p3.shape[0], -1)
         p4 = self.avgpool(p4).view(p4.shape[0], -1)
         
-        return (p2, p3, p4), torch.nn.functional.interpolate(p2_f, size = x0.shape[2], mode = 'bilinear', align_corners = False), x1
+        return (p2, p3, p4), torch.nn.functional.interpolate(p2_f, size = x0.shape[2], mode = 'bilinear', align_corners = False), x0
 
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
