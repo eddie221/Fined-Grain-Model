@@ -40,11 +40,21 @@ class feature_block(nn.Module):
 class lifting_extract(nn.Module):
     def __init__(self, in_cha, out_cha):
         super(lifting_extract, self).__init__()
-        self.feature_extract_ll = feature_block(in_cha, out_cha)
-        self.feature_extract_lh = feature_block(in_cha, out_cha)
-        self.feature_extract_hl = feature_block(in_cha, out_cha)
-        self.feature_extract_hh = feature_block(in_cha, out_cha)
+        self.feature_extract_ll = self._make_layer(in_cha, out_cha, 2)
+        self.feature_extract_lh = self._make_layer(in_cha, out_cha, 2)
+        self.feature_extract_hl = self._make_layer(in_cha, out_cha, 2)
+        self.feature_extract_hh = self._make_layer(in_cha, out_cha, 2)
         
+        
+        
+    def _make_layer(self, in_cha, out_cha, layer):
+        layers = []
+        for i in range(layer - 1):
+            layers.append(feature_block(in_cha, in_cha))
+        
+        layers.append(feature_block(in_cha, out_cha))
+        return nn.Sequential(*layers)
+    
     def forward(self, x):
         ll, lh, hl, hh = lift_pool.lifting_down(x)
         ll_x = self.feature_extract_ll(ll)
@@ -122,5 +132,6 @@ def dev_mod(num_classes = 1000):
 
 if __name__ == "__main__":
     model = dev_model(9)
+    print(model)
     a = torch.randn([2, 3, 224, 224])
     model(a)
