@@ -5,11 +5,17 @@ Created on Wed Mar  3 16:51:49 2021
 
 @author: eddie
 """
-from PIL import Image
 import numpy as np
 import torch
 
-def lifting_down(img):
+def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
+    if pad_mode == 'discard':
+        img = img[:, :, :img.shape[2] // 2 * 2, :img.shape[3] // 2 * 2]
+    elif pad_mode == 'pad0':
+        img = torch.nn.functional.pad(img, pad = pad_place, mode = 'constant', value = 0)
+    else:
+        img = torch.nn.functional.pad(img, pad = pad_place, mode = pad_mode)
+
     h_img_odd = img[:, :, 1::2, :]
     h_img_even = img[:, :, 0::2, :]
     l = torch.div((h_img_even + h_img_odd), 2)
@@ -44,14 +50,17 @@ if __name__ == "__main__":
     #image = Image.open("./test.png")
     
     #image = np.array(image)[:, :, :3]
-    image = torch.tensor([[[[30],[12], [16], [20]],
-                      [[28], [2], [18], [2]], 
-                      [[10],[12],[14],[16]],
-                      [[18],[20], [22], [24]]]])
+    image = torch.randn([1, 3, 3, 3])
+# =============================================================================
+#     image = torch.tensor([[[[30],[12], [16], [20]],
+#                       [[28], [2], [18], [2]], 
+#                       [[10],[12],[14],[16]],
+#                       [[18],[20], [22], [24]]]])
+# =============================================================================
 # =============================================================================
 #     image = np.arange(16).reshape(4, 4, 1)    
 # =============================================================================
-    ll, hl, lh, hh = lifting_down(image)
+    ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')
     lifting_up(ll, hl, lh, hh)
 
 

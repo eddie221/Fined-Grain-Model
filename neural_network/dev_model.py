@@ -10,16 +10,16 @@ import torch
 import torch.nn as nn
 import neural_network.lifting_pool as lift_pool
 
-class feature_block(nn.Module):
-    def __init__(self, in_cha, out_cha):
-        super(feature_block, self).__init__()
-        self.extract = nn.Sequential(nn.Conv2d(in_cha, in_cha, 3, padding = 1),
+class lifting_extract(nn.Module):
+    def __init__(self, in_cha, out_cha, **kwargs):
+        super(lifting_extract, self).__init__()
+        self.extract = nn.Sequential(nn.Conv2d(in_cha, in_cha, 3, padding = 1, groups = kwargs['groups']),
                                    nn.BatchNorm2d(in_cha),
                                    nn.ReLU(),
-                                   nn.Conv2d(in_cha, out_cha, 3, padding = 1),
+                                   nn.Conv2d(in_cha, out_cha, 3, padding = 1, groups = kwargs['groups']),
                                    nn.BatchNorm2d(out_cha),
                                    nn.ReLU(),
-                                   nn.Conv2d(out_cha, out_cha, 3, padding = 1),
+                                   nn.Conv2d(out_cha, out_cha, 3, padding = 1, groups = kwargs['groups']),
                                    nn.BatchNorm2d(out_cha),
                                    )
         self.relu = nn.ReLU(inplace=True)    
@@ -34,51 +34,36 @@ class feature_block(nn.Module):
             residual = self.cha_equ(residual)
             
         x = x + residual
-        x = self.relu(x)
+        
         return x
-    
-class lifting_extract(nn.Module):
-    def __init__(self, in_cha, out_cha):
-        super(lifting_extract, self).__init__()
-        self.feature_extract_ll = self._make_layer(in_cha, out_cha, 2)
-        self.feature_extract_lh = self._make_layer(in_cha, out_cha, 2)
-        self.feature_extract_hl = self._make_layer(in_cha, out_cha, 2)
-        self.feature_extract_hh = self._make_layer(in_cha, out_cha, 2)
-        
-        
-        
-    def _make_layer(self, in_cha, out_cha, layer):
-        layers = []
-        for i in range(layer - 1):
-            layers.append(feature_block(in_cha, in_cha))
-        
-        layers.append(feature_block(in_cha, out_cha))
-        return nn.Sequential(*layers)
-    
-    def forward(self, x):
-        ll, lh, hl, hh = lift_pool.lifting_down(x)
-        ll_x = self.feature_extract_ll(ll)
-        lh_x = self.feature_extract_lh(lh)
-        hl_x = self.feature_extract_hl(hl)
-        hh_x = self.feature_extract_hh(hh)
-        
-        return ll_x, lh_x, hl_x, hh_x
 
 class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.in_cha = 16
+        self.conv1 = nn.Conv2d(3, self.in_cha, kernel_size=7, stride=2, padding=3,
                                bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = nn.BatchNorm2d(self.in_cha)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        
-        self.lifting_node_l1 = lifting_extract(64, 64)
-        self.lifting_node_l2 = lifting_extract(256, 256)
-        self.lifting_node_l3 = lifting_extract(1024, 1024)
+        self.groups = 4
+        self.lifting_node_l1 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3, groups = self.groups)
+        self.lifting_node_l2 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 4, groups = self.groups)
+        self.lifting_node_l3 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 6, groups = self.groups)
+        self.lifting_node_l4 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3, groups = self.groups)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 4096)
+        
+    def _make_layer(self, block, in_cha, out_cha, layer, **kwargs):
+        layers = []
+        for i in range(layer - 1):
+            layers.append(block(in_cha, in_cha, **kwargs))
+        
+        layers.append(block(in_cha, out_cha, **kwargs))
+        self.groups = self.groups * 4
+        self.in_cha = self.in_cha * 4
+        return nn.Sequential(*layers)
         
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
         """
@@ -113,17 +98,27 @@ class dev_model(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
+        
         layer1 = self.lifting_node_l1(x)
+        layer1 = lift_pool.lifting_down(layer1)
         layer1 = torch.cat(layer1, dim = 1)
+        
         layer2 = self.lifting_node_l2(layer1)
+        layer2 = lift_pool.lifting_down(layer2)
         layer2 = torch.cat(layer2, dim = 1)
+        
         layer3 = self.lifting_node_l3(layer2)
+        layer3 = lift_pool.lifting_down(layer3)
         layer3 = torch.cat(layer3, dim = 1)
-    
-        layer3 = self.avg(layer3)
-        layer3 = layer3.view(layer3.shape[0], -1)
-        layer3 = self.fc(layer3)
-        return layer3
+
+        layer4 = self.lifting_node_l4(layer3)
+        layer4 = lift_pool.lifting_down(layer4)
+        layer4 = torch.cat(layer4, dim = 1)
+        
+        layer4 = self.avg(layer4)
+        layer4 = layer4.view(layer4.shape[0], -1)
+        layer4 = self.fc(layer4)
+        return layer4
     
     
 def dev_mod(num_classes = 1000):
@@ -132,6 +127,5 @@ def dev_mod(num_classes = 1000):
 
 if __name__ == "__main__":
     model = dev_model(9)
-    print(model)
     a = torch.randn([2, 3, 224, 224])
     model(a)
