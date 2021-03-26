@@ -17,7 +17,6 @@ class cofeature_fast(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilate = dilate
-        self.instance_norm = nn.InstanceNorm1d(196)
         self.relu = nn.ReLU()
         if pad == 'reflect':
             self.pad = nn.ReplicationPad2d(kernel_size // 2)

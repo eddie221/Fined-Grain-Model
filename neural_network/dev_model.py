@@ -9,6 +9,7 @@ Created on Tue Mar 23 16:34:25 2021
 import torch
 import torch.nn as nn
 import neural_network.lifting_pool as lift_pool
+from neural_network.cofe import cofeature_fast
 
 class lifting_extract(nn.Module):
     def __init__(self, in_cha, out_cha, **kwargs):
@@ -52,8 +53,15 @@ class dev_model(nn.Module):
         self.lifting_node_l3 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 6, groups = self.groups)
         self.lifting_node_l4 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3, groups = self.groups)
         
+        self.cofe = cofeature_fast(3)
+        self.cofe_squeeze = nn.Sequential(nn.Conv1d(20, 4, 1, groups = 4),
+                                             nn.BatchNorm1d(4),
+                                             nn.ReLU(),
+                                             nn.Conv1d(4, 1, 1))
+        
         self.avg = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 4096)
+        self.cofe_fc = self._construct_fc_layer([4096], 65536)
+        self.fc = self._construct_fc_layer([num_classes], 4096 * 2)
         
     def _make_layer(self, block, in_cha, out_cha, layer, **kwargs):
         layers = []
@@ -109,6 +117,14 @@ class dev_model(nn.Module):
         
         layer3 = self.lifting_node_l3(layer2)
         layer3 = lift_pool.lifting_down(layer3)
+        cofe_ll = self.cofe(layer3[0])
+        cofe_lh = self.cofe(layer3[1])
+        cofe_hl = self.cofe(layer3[2])
+        cofe_hh = self.cofe(layer3[3])
+        
+        cofe = self.cofe_squeeze(torch.cat([cofe_ll, cofe_lh, cofe_hl, cofe_hh], dim = 1)).view(x.shape[0], -1)
+        cofe = self.cofe_fc(cofe)
+        
         layer3 = torch.cat(layer3, dim = 1)
 
         layer4 = self.lifting_node_l4(layer3)
@@ -117,7 +133,7 @@ class dev_model(nn.Module):
         
         layer4 = self.avg(layer4)
         layer4 = layer4.view(layer4.shape[0], -1)
-        layer4 = self.fc(layer4)
+        layer4 = self.fc(torch.cat([layer4, cofe], dim = 1))
         return layer4
     
     
