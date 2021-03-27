@@ -8,7 +8,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-kernel_sample = {3 : [0, 1, 2, 3, 4], 
+kernel_sample = {1 : [0], 
+                 3 : [0, 1, 2, 3, 4], 
                  5 : [0, 2, 4, 10, 12]}
 
 class cofeature_fast(nn.Module):
