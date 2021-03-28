@@ -65,7 +65,7 @@ class dev_model(nn.Module):
         self.layer1 = self._make_layer(self.inplanes, 64, 3)
         self.layer2 = self._make_layer(self.inplanes, 128, 4)
         self.layer3 = self._make_layer(self.inplanes, 256, 6)
-        self.layer4 = self._make_layer(self.inplanes, 512, 6)
+        self.layer4 = self._make_layer(self.inplanes, 512, 3)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
