@@ -36,6 +36,19 @@ class lifting_extract(nn.Module):
         x = x + residual
         
         return x
+    
+class lateral_connect(nn.Module):
+    def __init__(self, input_channel, output_channel):
+        super(lateral_connect, self).__init__()
+        self.lateral = nn.Conv2d(input_channel, output_channel, kernel_size=1)
+        self.append_conv = nn.Conv2d(output_channel, output_channel, kernel_size=3, stride=1, padding=1)
+    
+    def upsample_and_add(self, target, small):
+        n, c, h, w = target.size()
+        return torch.nn.functional.interpolate(small, size=(h, w), mode='bilinear', align_corners=True) + target
+    
+    def forward(self, bottom_up, top_down):
+        return self.append_conv(self.upsample_and_add(self.lateral(bottom_up), top_down))
 
 class dev_model(nn.Module):
     def __init__(self, num_classes):
@@ -51,8 +64,16 @@ class dev_model(nn.Module):
         self.lifting_node_l3 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 6)
         self.lifting_node_l4 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3)
         
+        self.FPN_feature = 256
+        self.top = nn.Conv2d(4096, self.FPN_feature, kernel_size=1)
+        self.lateral1 = lateral_connect(1024, self.FPN_feature)
+        self.lateral2 = lateral_connect( 256, self.FPN_feature)
+        
         self.avg = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 4096)
+        
+        self.fc2 = self._construct_fc_layer([num_classes], 256)
+        self.fc3 = self._construct_fc_layer([num_classes], 256)
+        self.fc4 = self._construct_fc_layer([num_classes], 256)
         
     def _make_layer(self, block, in_cha, out_cha, layer, **kwargs):
         layers = []
@@ -90,6 +111,12 @@ class dev_model(nn.Module):
         self.feature_dim = fc_dims[-1]
         
         return nn.Sequential(*layers)
+    
+    def FPN(self, x2, x3, x4):
+        p4 = self.top(x4)
+        p3 = self.lateral1(x3, p4)
+        p2 = self.lateral2(x2, p3)
+        return p2, p3, p4
         
     def forward(self, x):
         x = self.conv1(x)
@@ -113,10 +140,20 @@ class dev_model(nn.Module):
         layer4 = lift_pool.lifting_down(layer4)
         layer4 = torch.cat(layer4, dim = 1)
         
-        layer4 = self.avg(layer4)
-        layer4 = layer4.view(layer4.shape[0], -1)
-        layer4 = self.fc(layer4)
-        return layer4
+        f2, f3, f4 = self.FPN(layer2, layer3, layer4)
+        
+        f2 = self.avg(f2)
+        f2 = f2.view(f2.shape[0], -1)
+        f2 = self.fc2(f2)
+        
+        f3 = self.avg(f3)
+        f3 = f3.view(f3.shape[0], -1)
+        f3 = self.fc3(f3)
+        
+        f4 = self.avg(f4)
+        f4 = f4.view(f4.shape[0], -1)
+        f4 = self.fc4(f4)
+        return f2, f3, f4
     
     
 def dev_mod(num_classes = 1000):
