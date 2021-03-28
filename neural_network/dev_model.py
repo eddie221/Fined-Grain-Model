@@ -10,78 +10,73 @@ import torch
 import torch.nn as nn
 import neural_network.lifting_pool as lift_pool
 
-class lifting_extract(nn.Module):
-    def __init__(self, in_cha, out_cha, **kwargs):
-        super(lifting_extract, self).__init__()
-        self.extract = nn.Sequential(nn.Conv2d(in_cha, in_cha, 3, padding = 1),
-                                   nn.BatchNorm2d(in_cha),
-                                   nn.ReLU(),
-                                   nn.Conv2d(in_cha, out_cha, 3, padding = 1),
-                                   nn.BatchNorm2d(out_cha),
-                                   nn.ReLU(),
-                                   nn.Conv2d(out_cha, out_cha, 3, padding = 1),
-                                   nn.BatchNorm2d(out_cha),
-                                   )
+class feature_block(nn.Module):
+    def __init__(self, inplanes, planes, lifting = False):
+        super(feature_block, self).__init__()
+        self.lifting = lifting
+        
+        self.conv1 = nn.Conv2d(inplanes, planes, 3, padding = 1)
+        self.bn1 = nn.BatchNorm2d(planes)
+        
+        self.conv2 = nn.Conv2d(planes, planes, 3, padding = 1)
+        self.bn2 = nn.BatchNorm2d(planes)
+        
+        if lifting:
+            self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
+                                            nn.BatchNorm2d(planes * 4))
+            planes = planes * 4
+            inplanes = planes
+            
+        self.conv3 = nn.Conv2d(planes, inplanes, 1)
+        self.bn3 = nn.BatchNorm2d(inplanes)
+        
         self.relu = nn.ReLU(inplace=True)    
-        self.cha_equ = None
-        if in_cha != out_cha:
-            self.cha_equ = nn.Conv2d(in_cha, out_cha, 1)
         
     def forward(self, x):
         residual = x
-        x = self.extract(residual)
-        if self.cha_equ is not None:
-            residual = self.cha_equ(residual)
-            
-        x = x + residual
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
         
+        if self.lifting:
+            x = lift_pool.lifting_down(x)
+            x = torch.cat(x, dim = 1)
+            residual = self.downsample(residual)
+        x = self.conv3(x)
+        x = self.bn3(x)
+        
+        x = x + residual
+        x = self.relu(x)
         return x
     
-class lateral_connect(nn.Module):
-    def __init__(self, input_channel, output_channel):
-        super(lateral_connect, self).__init__()
-        self.lateral = nn.Conv2d(input_channel, output_channel, kernel_size=1)
-        self.append_conv = nn.Conv2d(output_channel, output_channel, kernel_size=3, stride=1, padding=1)
-    
-    def upsample_and_add(self, target, small):
-        n, c, h, w = target.size()
-        return torch.nn.functional.interpolate(small, size=(h, w), mode='bilinear', align_corners=True) + target
-    
-    def forward(self, bottom_up, top_down):
-        return self.append_conv(self.upsample_and_add(self.lateral(bottom_up), top_down))
-
 class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
-        self.in_cha = 16
-        self.conv1 = nn.Conv2d(3, self.in_cha, kernel_size=7, stride=2, padding=3,
+        self.inplanes = 64
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3,
                                bias=False)
-        self.bn1 = nn.BatchNorm2d(self.in_cha)
+        self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.lifting_node_l1 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3)
-        self.lifting_node_l2 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 4)
-        self.lifting_node_l3 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 6)
-        self.lifting_node_l4 = self._make_layer(lifting_extract, self.in_cha, self.in_cha, 3)
         
-        self.FPN_feature = 256
-        self.top = nn.Conv2d(4096, self.FPN_feature, kernel_size=1)
-        self.lateral1 = lateral_connect(1024, self.FPN_feature)
-        self.lateral2 = lateral_connect( 256, self.FPN_feature)
+        self.layer1 = self._make_layer(self.inplanes, 64, 3)
+        self.layer2 = self._make_layer(self.inplanes, 128, 4)
+        self.layer3 = self._make_layer(self.inplanes, 256, 6)
+        self.layer4 = self._make_layer(self.inplanes, 512, 6)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
+        self.fc = self._construct_fc_layer([num_classes], 2048)
         
-        self.fc2 = self._construct_fc_layer([num_classes], 256)
-        self.fc3 = self._construct_fc_layer([num_classes], 256)
-        self.fc4 = self._construct_fc_layer([num_classes], 256)
-        
-    def _make_layer(self, block, in_cha, out_cha, layer, **kwargs):
+    def _make_layer(self, inplanes, planes, blocks):
         layers = []
-        for i in range(layer - 1):
-            layers.append(block(in_cha, in_cha, **kwargs))
-        
-        layers.append(block(in_cha, out_cha, **kwargs))
-        self.in_cha = self.in_cha * 4
+        layers.append(feature_block(inplanes, planes, True))
+        inplanes = planes * 4
+        for i in range(1, blocks):
+            layers.append(feature_block(inplanes, planes))
+        self.inplanes = inplanes
         return nn.Sequential(*layers)
         
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
@@ -111,49 +106,21 @@ class dev_model(nn.Module):
         self.feature_dim = fc_dims[-1]
         
         return nn.Sequential(*layers)
-    
-    def FPN(self, x2, x3, x4):
-        p4 = self.top(x4)
-        p3 = self.lateral1(x3, p4)
-        p2 = self.lateral2(x2, p3)
-        return p2, p3, p4
         
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-
-        layer1 = self.lifting_node_l1(x)
-        layer1 = lift_pool.lifting_down(layer1)
-        layer1 = torch.cat(layer1, dim = 1)
         
-        layer2 = self.lifting_node_l2(layer1)
-        layer2 = lift_pool.lifting_down(layer2)
-        layer2 = torch.cat(layer2, dim = 1)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
         
-        layer3 = self.lifting_node_l3(layer2)
-        layer3 = lift_pool.lifting_down(layer3)
-        layer3 = torch.cat(layer3, dim = 1)
-
-        layer4 = self.lifting_node_l4(layer3)
-        layer4 = lift_pool.lifting_down(layer4)
-        layer4 = torch.cat(layer4, dim = 1)
-        
-        f2, f3, f4 = self.FPN(layer2, layer3, layer4)
-        
-        f2 = self.avg(f2)
-        f2 = f2.view(f2.shape[0], -1)
-        f2 = self.fc2(f2)
-        
-        f3 = self.avg(f3)
-        f3 = f3.view(f3.shape[0], -1)
-        f3 = self.fc3(f3)
-        
-        f4 = self.avg(f4)
-        f4 = f4.view(f4.shape[0], -1)
-        f4 = self.fc4(f4)
-        return f2, f3, f4
+        x = self.avg(x).view(x.shape[0], -1)
+        x = self.fc(x)
+        return x
     
     
 def dev_mod(num_classes = 1000):
@@ -162,5 +129,6 @@ def dev_mod(num_classes = 1000):
 
 if __name__ == "__main__":
     model = dev_model(9)
+    print(model)
     a = torch.randn([2, 3, 224, 224])
     model(a)
