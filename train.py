@@ -7,6 +7,7 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.dev_model as model_net
+import neural_network.resnet as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -26,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -101,7 +102,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = model_net.dev_mod(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
