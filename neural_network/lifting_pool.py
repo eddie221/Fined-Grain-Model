@@ -34,7 +34,6 @@ def lifting_up(ll, hl, lh, hh):
     map3 = lh + hh
     map4 = lh - hh
     
-    
     map11 = map1 + map3
     map22 = map1 - map3
     map33 = map2 + map4
