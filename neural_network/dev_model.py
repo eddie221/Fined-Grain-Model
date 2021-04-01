@@ -25,13 +25,16 @@ class feature_block(nn.Module):
             self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
                                             nn.BatchNorm2d(planes * 4))
             self.avg = nn.AdaptiveAvgPool2d(1)
-            self.fc = nn.Sequential(nn.Linear(planes, planes // 8),
+            self.fc = nn.Sequential(nn.Linear(planes * 4, planes * 4 // 8),
                                     nn.ReLU(),
-                                    nn.Linear(planes // 8, planes),
+                                    nn.Linear(planes * 4 // 8, planes * 4),
                                     nn.Sigmoid()
                                     )
             
-        self.conv3 = nn.Conv2d(planes, planes * 4, 1)
+            self.conv3 = nn.Conv2d(planes * 4, planes * 4, 1)
+        else:
+            self.conv3 = nn.Conv2d(planes, planes * 4, 1)
+            
         self.bn3 = nn.BatchNorm2d(planes * 4)
         
         self.relu = nn.ReLU(inplace=True)  
@@ -55,7 +58,8 @@ class feature_block(nn.Module):
         
         if self.lifting:
             x = lift_pool.lifting_down(x)
-            x = self.attention(x[-1])
+            x = torch.cat(x, dim = 1)
+            x = self.attention(x)
             residual = self.downsample(residual)
             
         x = self.conv3(x)
