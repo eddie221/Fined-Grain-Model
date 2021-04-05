@@ -9,13 +9,12 @@ Created on Tue Mar 23 16:34:25 2021
 import torch
 import torch.nn as nn
 import neural_network.lifting_pool as lift_pool
-import numpy as np
 
 class feature_block(nn.Module):
     def __init__(self, inplanes, planes, lifting = False):
         super(feature_block, self).__init__()
         self.lifting = lifting
-        self.planes = planes
+        
         self.conv1 = nn.Conv2d(inplanes, planes, 3, padding = 1)
         self.bn1 = nn.BatchNorm2d(planes)
         
@@ -26,13 +25,13 @@ class feature_block(nn.Module):
             self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
                                             nn.BatchNorm2d(planes * 4))
             self.avg = nn.AdaptiveAvgPool2d(1)
-            self.fc = nn.Sequential(nn.Linear(planes * 3, planes * 3 // 2),
+            self.fc = nn.Sequential(nn.Linear(planes * 4, planes * 4 // 8),
                                     nn.ReLU(),
-                                    nn.Linear(planes * 3 // 2, planes * 3),
+                                    nn.Linear(planes * 4 // 8, planes * 4),
                                     nn.Sigmoid()
                                     )
             
-            self.conv3 = nn.Conv2d(planes * 3, planes * 4, 1)
+            self.conv3 = nn.Conv2d(planes * 4, planes * 4, 1)
         else:
             self.conv3 = nn.Conv2d(planes, planes * 4, 1)
             
@@ -49,7 +48,6 @@ class feature_block(nn.Module):
         
         
     def forward(self, x):
-        batch, channel, h, w = x.shape
         residual = x
         x = self.conv1(x)
         x = self.bn1(x)
@@ -61,13 +59,6 @@ class feature_block(nn.Module):
         if self.lifting:
             x = lift_pool.lifting_down(x)
             x = torch.cat(x, dim = 1)
-            batch, channel, h, w = x.shape
-            x_energe = self.avg(torch.pow(x, 2)).squeeze(-1).squeeze(-1)
-            val, idx = torch.topk(x_energe, dim = 1, k = self.planes * 3) 
-            idx = np.array(idx) + np.arange(0, self.planes * 4 * batch, self.planes * 4).reshape(-1, 1)
-            x = x.view(-1, h, w)
-            x = x[idx.reshape(-1, 1).squeeze(1)]
-            x = x.view(batch, -1, h, w)
             x = self.attention(x)
             residual = self.downsample(residual)
             
@@ -143,7 +134,7 @@ class dev_model(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-
+        
         x = self.avg(x).view(x.shape[0], -1)
         x = self.fc(x)
         return x
