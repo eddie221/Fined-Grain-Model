@@ -26,13 +26,13 @@ class feature_block(nn.Module):
             self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
                                             nn.BatchNorm2d(planes * 4))
             self.avg = nn.AdaptiveAvgPool2d(1)
-            self.fc = nn.Sequential(nn.Linear(planes, planes // 2),
+            self.fc = nn.Sequential(nn.Linear(planes * 3, planes * 3 // 2),
                                     nn.ReLU(),
-                                    nn.Linear(planes // 2, planes),
+                                    nn.Linear(planes * 3 // 2, planes * 3),
                                     nn.Sigmoid()
                                     )
             
-            self.conv3 = nn.Conv2d(planes, planes * 4, 1)
+            self.conv3 = nn.Conv2d(planes * 3, planes * 4, 1)
         else:
             self.conv3 = nn.Conv2d(planes, planes * 4, 1)
             
@@ -63,7 +63,7 @@ class feature_block(nn.Module):
             x = torch.cat(x, dim = 1)
             batch, channel, h, w = x.shape
             x_energe = self.avg(torch.pow(x, 2)).squeeze(-1).squeeze(-1)
-            val, idx = torch.topk(x_energe, dim = 1, k = self.planes) 
+            val, idx = torch.topk(x_energe, dim = 1, k = self.planes * 3) 
             idx = np.array(idx) + np.arange(0, self.planes * 4 * batch, self.planes * 4).reshape(-1, 1)
             x = x.view(-1, h, w)
             x = x[idx.reshape(-1, 1).squeeze(1)]
