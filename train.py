@@ -7,7 +7,6 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.dev_model as model_net
-import neural_network.resnet as model_net
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -27,7 +26,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -102,7 +101,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'cofe_resnet'
-    model = model_net.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
     return model
@@ -183,10 +182,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     output_1 = model(b_data)
-    _, predicted = torch.max(output_1.data, 1)
+    _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
+    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
     loss = cls_loss
     
     if phase == 'train':
