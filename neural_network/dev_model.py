@@ -8,7 +8,7 @@ Created on Tue Mar 23 16:34:25 2021
 
 import torch
 import torch.nn as nn
-import neural_network.lifting_pool as lift_pool
+from neural_network.lifting_pool import Lifting_down
 
 class feature_block(nn.Module):
     def __init__(self, inplanes, planes, lifting = False):
@@ -22,6 +22,7 @@ class feature_block(nn.Module):
         self.bn2 = nn.BatchNorm2d(planes)
         
         if lifting:
+            self.lifting_pool = Lifting_down(planes, 2)
             self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
                                             nn.BatchNorm2d(planes * 4))
             self.avg = nn.AdaptiveAvgPool2d(1)
@@ -57,7 +58,7 @@ class feature_block(nn.Module):
         x = self.relu(x)
         
         if self.lifting:
-            x = lift_pool.lifting_down(x)
+            x = self.lifting_pool(x)
             x = torch.cat(x, dim = 1)
             x = self.attention(x)
             residual = self.downsample(residual)
@@ -86,6 +87,13 @@ class dev_model(nn.Module):
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
+        
+        self.lifting_pool = []
+        for m in self.modules():
+            if isinstance(m, Lifting_down):
+                self.lifting_pool.append(m)
+                
+        print(len(self.lifting_pool))
         
     def _make_layer(self, inplanes, planes, blocks):
         layers = []
@@ -149,3 +157,5 @@ if __name__ == "__main__":
     print(model)
     a = torch.randn([2, 3, 224, 224])
     model(a)
+    
+    #model.lifting_pool[0].filter_constraint()
