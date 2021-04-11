@@ -26,7 +26,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -112,7 +112,9 @@ def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
-                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+                 torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
+                                   {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
+                                  lr = LR, weight_decay = 1e-4)
                 ]
     set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 110, 140], gamma=0.1),
                         ]
@@ -190,13 +192,13 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
     loss = cls_loss
     
+    for j in range(len(model.lifting_pool)):
+        model.lifting_pool[j].filter_constraint()
+    
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
-    
-    for i in range(len(model.lifting_pool)):
-        model.lifting_pool[i].filter_constraint()
     
     return loss.item(), predicted.detach().cpu()
 
@@ -259,17 +261,8 @@ def training(job):
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
-                        torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
+                        #torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
                         
-    # =============================================================================
-    #             if phase == "train":
-    #                 writer.add_scalar('Loss/train', loss, epoch)
-    #                 writer.add_scalar('Accuracy/train', correct, epoch)
-    #             else:
-    #                 writer.add_scalar('Loss/test', loss, epoch)
-    #                 writer.add_scalar('Accuracy/test', correct, epoch)
-    # =============================================================================
-                
                 print('Index : {}'.format(INDEX))
                 print("dataset : {}".format(data_dir))
                 print("Model name : {}".format(model_name))

@@ -33,7 +33,7 @@ class Bottleneck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
-
+                
     def forward(self, x):
         residual = x
         out = self.conv1(x)
@@ -147,10 +147,45 @@ class dev_model(nn.Module):
 def dev_mod(num_classes = 1000):
     model = dev_model(num_classes)
     return model
-
+    
 if __name__ == "__main__":
-    model = dev_model(9)
-    a = torch.randn([2, 3, 224, 224])
-    model(a)
+    model = dev_model(9).cuda()
+    a = torch.randn([8, 3, 224, 224]).cuda()
+    optim = torch.optim.Adam([
+        {'params' : [param for name, param in model.named_parameters() if name != "Lifting_down"]},
+        {'params' : [param for name, param in model.named_parameters() if name == "Lifting_down"], 'lr' : 1e-2},
+        ], lr = 1e-4, weight_decay = 1e-4)
+    print(optim)
+# =============================================================================
+#     param = torch.load('../pkl/fold_0_best_20210408-3.pkl')
+#     model.load_state_dict(param)
+# =============================================================================
+    
+    loss_f = torch.nn.CrossEntropyLoss()
+    
+    label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
+    for i in range(5):
+        output = model(a)
+        optim.zero_grad()
+        loss = loss_f(output, label)
+        
+        loss.backward()
+        optim.step()
+        
+        print("before")
+        print(model.lifting_pool[0].low_pass_filter_h.weight[0])
+        print(model.lifting_pool[0].high_pass_filter_h.weight[0])
+        print(model.lifting_pool[0].low_pass_filter_v.weight[0])
+        print(model.lifting_pool[0].high_pass_filter_v.weight[0])
+        
+        for j in range(len(model.lifting_pool)):
+            model.lifting_pool[j].filter_constraint()
+        
+        print("after")
+        print(model.lifting_pool[0].low_pass_filter_h.weight[0])
+        print(model.lifting_pool[0].high_pass_filter_h.weight[0])
+        print(model.lifting_pool[0].low_pass_filter_v.weight[0])
+        print(model.lifting_pool[0].high_pass_filter_v.weight[0])
+        print()
     
     #model.lifting_pool[0].filter_constraint()
