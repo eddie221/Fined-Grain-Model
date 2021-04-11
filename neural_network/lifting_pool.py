@@ -119,8 +119,8 @@ if __name__ == "__main__":
     pool.filter_constraint()
     
     # test 2
-    image = torch.randn([2, 3, 32, 32])
-    pool = Lifting_down(3, kernel_size = 8)
+    image = torch.randn([2, 5, 32, 32])
+    pool = Lifting_down(5, kernel_size = 8)
     output = pool(image)
     print(output[0].shape)
     pool.filter_constraint()

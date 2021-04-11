@@ -26,7 +26,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -114,7 +114,7 @@ def create_opt_loss(model):
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
                  torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 110, 150, 180], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 110, 140], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
@@ -239,13 +239,14 @@ def training(job):
                 else:
                     model.train(False)
                     all_image_datasets.transform = data_transforms['val']
-                    
+                step = 0
                 for data, label in tqdm.tqdm(image_data[phase]):
                     loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
                     
                     loss_t.update(loss, data.size(0))
                     correct_t.update((predicted.cpu() == label).sum().item(), label.shape[0])
                     
+                    step += 1
                     if CON_MATRIX:
                         np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
 

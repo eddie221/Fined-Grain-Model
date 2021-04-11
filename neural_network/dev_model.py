@@ -10,65 +10,54 @@ import torch
 import torch.nn as nn
 from neural_network.lifting_pool import Lifting_down
 
-class feature_block(nn.Module):
-    def __init__(self, inplanes, planes, lifting = False):
-        super(feature_block, self).__init__()
-        self.lifting = lifting
-        
-        self.conv1 = nn.Conv2d(inplanes, planes, 3, padding = 1)
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, lifting = False):
+        super(Bottleneck, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         
-        self.conv2 = nn.Conv2d(planes, planes, 3, padding = 1)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         
+        self.lifting = lifting
         if lifting:
-            self.lifting_pool = Lifting_down(planes, 2)
-            self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes * 4, 1, stride = 2),
-                                            nn.BatchNorm2d(planes * 4))
-            self.avg = nn.AdaptiveAvgPool2d(1)
-            self.fc = nn.Sequential(nn.Linear(planes * 4, planes * 4 // 8),
-                                    nn.ReLU(),
-                                    nn.Linear(planes * 4 // 8, planes * 4),
-                                    nn.Sigmoid()
-                                    )
-            
-            self.conv3 = nn.Conv2d(planes * 4, planes * 4, 1)
+            self.lifting_down = Lifting_down(planes, 2)
+            self.conv3 = nn.Conv2d(planes * 4, planes * 4, kernel_size=1, bias=False)
         else:
-            self.conv3 = nn.Conv2d(planes, planes * 4, 1)
-            
+            self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes * 4)
         
-        self.relu = nn.ReLU(inplace=True)  
-        
-    def attention(self, x):
-        x_avg = self.avg(x)
-        x_att = self.fc(x_avg.view(x.shape[0], -1))
-        x_att = x_att.unsqueeze(2).unsqueeze(2)
-        x = x_att * x + x
-        return x
-        
-        
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
     def forward(self, x):
         residual = x
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu(x)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
         
         if self.lifting:
-            x = self.lifting_pool(x)
-            x = torch.cat(x, dim = 1)
-            x = self.attention(x)
-            residual = self.downsample(residual)
-            
-        x = self.conv3(x)
-        x = self.bn3(x)
-        
-        x = x + residual
-        x = self.relu(x)
-        return x
+            out = self.lifting_down(out)
+            out = torch.cat(out, dim = 1)
+            out = self.conv3(out)
+        else:
+            out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+
+        return out
     
 class dev_model(nn.Module):
     def __init__(self, num_classes):
@@ -80,10 +69,10 @@ class dev_model(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        self.layer1 = self._make_layer(self.inplanes, 64, 3)
-        self.layer2 = self._make_layer(self.inplanes, 128, 4)
-        self.layer3 = self._make_layer(self.inplanes, 256, 6)
-        self.layer4 = self._make_layer(self.inplanes, 512, 3)
+        self.layer1 = self._make_layer(Bottleneck, 64, 3)
+        self.layer2 = self._make_layer(Bottleneck, 128, 4, stride = 2, lifting = True)
+        self.layer3 = self._make_layer(Bottleneck, 256, 6, stride = 2, lifting = True)
+        self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2, lifting = True)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
@@ -93,15 +82,22 @@ class dev_model(nn.Module):
             if isinstance(m, Lifting_down):
                 self.lifting_pool.append(m)
                 
-        print(len(self.lifting_pool))
         
-    def _make_layer(self, inplanes, planes, blocks):
+    def _make_layer(self, block, planes, blocks, stride = 1, lifting = False):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion or lifting:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
+
         layers = []
-        layers.append(feature_block(inplanes, planes, True))
-        inplanes = planes * 4
+        layers.append(block(self.inplanes, planes, 1, downsample, lifting = lifting))
+        self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(feature_block(inplanes, planes))
-        self.inplanes = inplanes
+            layers.append(block(self.inplanes, planes))
+
         return nn.Sequential(*layers)
         
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
@@ -154,7 +150,6 @@ def dev_mod(num_classes = 1000):
 
 if __name__ == "__main__":
     model = dev_model(9)
-    print(model)
     a = torch.randn([2, 3, 224, 224])
     model(a)
     
