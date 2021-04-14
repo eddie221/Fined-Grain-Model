@@ -79,9 +79,9 @@ class GNN(nn.Module):
     
 if __name__ == '__main__':
     torch.manual_seed(0)
-    a = torch.randn([1, 128, 16384]).cuda()
+    a = torch.randn([1, 5, 25]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
-    gnn = GNN([16384, 2048, 1024], power = 1, channel_feature = False).cuda()
+    gnn = GNN([25, 30, 35], power = 1, channel_feature = False).cuda()
     
     a = gnn(a)

@@ -112,9 +112,12 @@ def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
     optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
-                 torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
-                                   {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
-                                  lr = LR, weight_decay = 1e-4)
+                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+# =============================================================================
+#                  torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
+#                                    {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
+#                                   lr = LR, weight_decay = 1e-4)
+# =============================================================================
                 ]
     set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 110, 140], gamma=0.1),
                         ]
@@ -261,7 +264,7 @@ def training(job):
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
-                        #torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
+                        torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
                         
                 print('Index : {}'.format(INDEX))
                 print("dataset : {}".format(data_dir))

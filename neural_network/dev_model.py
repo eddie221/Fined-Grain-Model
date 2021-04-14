@@ -17,25 +17,18 @@ class Bottleneck(nn.Module):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
-        
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
                                padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
-        
-        self.lifting = lifting
-        if lifting:
-            self.lifting_down = Lifting_down(planes, 2)
-            self.conv3 = nn.Conv2d(planes * 4, planes * 4, kernel_size=1, bias=False)
-        else:
-            self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
+        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(planes * 4)
-        
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
-                
+
     def forward(self, x):
         residual = x
+
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -43,17 +36,13 @@ class Bottleneck(nn.Module):
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
-        
-        if self.lifting:
-            out = self.lifting_down(out)
-            out = torch.cat(out, dim = 1)
-            out = self.conv3(out)
-        else:
-            out = self.conv3(out)
+
+        out = self.conv3(out)
         out = self.bn3(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
+
         out += residual
         out = self.relu(out)
 
@@ -70,12 +59,15 @@ class dev_model(nn.Module):
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
-        self.layer2 = self._make_layer(Bottleneck, 128, 4, stride = 2, lifting = True)
-        self.layer3 = self._make_layer(Bottleneck, 256, 6, stride = 2, lifting = True)
-        self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2, lifting = True)
+        self.layer2 = self._make_layer(Bottleneck, 128, 4, stride = 2)
+        self.layer3 = self._make_layer(Bottleneck, 256, 6, stride = 2)
+        self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
+        
+        self.lifting1 = Lifting_down(256, 4)
+        self.lifting2 = Lifting_down(512, 4)
         
         self.lifting_pool = []
         for m in self.modules():
@@ -83,9 +75,9 @@ class dev_model(nn.Module):
                 self.lifting_pool.append(m)
                 
         
-    def _make_layer(self, block, planes, blocks, stride = 1, lifting = False):
+    def _make_layer(self, block, planes, blocks, stride = 1):
         downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion or lifting:
+        if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
@@ -93,7 +85,7 @@ class dev_model(nn.Module):
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, 1, downsample, lifting = lifting))
+        layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes))
@@ -135,9 +127,18 @@ class dev_model(nn.Module):
         x = self.maxpool(x)
         
         x = self.layer1(x)
+        x1 = x
+        x1 = self.lifting1(x1)
+        x1 = torch.cat(x1, dim = 1)
+        
         x = self.layer2(x)
+        x2 = x
+        x2 = self.lifting2(x2)
+        x2 = torch.cat(x2, dim = 1)
+        
         x = self.layer3(x)
-        x = self.layer4(x)
+        x = self.layer4(x + x1)
+        x = x + x2
         
         x = self.avg(x).view(x.shape[0], -1)
         x = self.fc(x)
@@ -151,10 +152,13 @@ def dev_mod(num_classes = 1000):
 if __name__ == "__main__":
     model = dev_model(9).cuda()
     a = torch.randn([8, 3, 224, 224]).cuda()
-    optim = torch.optim.Adam([
-        {'params' : [param for name, param in model.named_parameters() if name != "Lifting_down"]},
-        {'params' : [param for name, param in model.named_parameters() if name == "Lifting_down"], 'lr' : 1e-2},
-        ], lr = 1e-4, weight_decay = 1e-4)
+    optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
+# =============================================================================
+#     optim = torch.optim.Adam([
+#         {'params' : [param for name, param in model.named_parameters() if name != "Lifting_down"]},
+#         {'params' : [param for name, param in model.named_parameters() if name == "Lifting_down"], 'lr' : 1e-2},
+#         ], lr = 1e-4, weight_decay = 1e-4)
+# =============================================================================
     print(optim)
 # =============================================================================
 #     param = torch.load('../pkl/fold_0_best_20210408-3.pkl')
@@ -164,28 +168,14 @@ if __name__ == "__main__":
     loss_f = torch.nn.CrossEntropyLoss()
     
     label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(5):
+    for i in range(100):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
         
         loss.backward()
         optim.step()
-        
-        print("before")
-        print(model.lifting_pool[0].low_pass_filter_h.weight[0])
-        print(model.lifting_pool[0].high_pass_filter_h.weight[0])
-        print(model.lifting_pool[0].low_pass_filter_v.weight[0])
-        print(model.lifting_pool[0].high_pass_filter_v.weight[0])
-        
         for j in range(len(model.lifting_pool)):
             model.lifting_pool[j].filter_constraint()
-        
-        print("after")
-        print(model.lifting_pool[0].low_pass_filter_h.weight[0])
-        print(model.lifting_pool[0].high_pass_filter_h.weight[0])
-        print(model.lifting_pool[0].low_pass_filter_v.weight[0])
-        print(model.lifting_pool[0].high_pass_filter_v.weight[0])
         print()
-    
     #model.lifting_pool[0].filter_constraint()
