@@ -104,6 +104,7 @@ def create_nn_model():
     model_name = 'LiftModel'
     model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
     print(model)
+    print("lifting : {}".format(len(model.lifting_pool)))
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = Resnet.resnet50(NUM_CLASS).to(DEVICE)
     #model = model.to(DEVICE)
@@ -190,12 +191,11 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     output_1 = model(b_data)
-    _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data + output_1[3].data, 1)
+    _, predicted = torch.max(output_1.data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
+    cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
-    
     for j in range(len(model.lifting_pool)):
         model.lifting_pool[j].filter_constraint()
     

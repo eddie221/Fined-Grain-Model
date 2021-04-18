@@ -66,18 +66,6 @@ class dev_model(nn.Module):
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
         
-        self.lifting1 = Lifting_down(256, 2)
-        self.lifting2 = Lifting_down(512, 2)
-        self.lifting3 = Lifting_down(1024, 2)
-        
-        self.squeeze1 = nn.Conv2d(256, 64, 1)
-        self.squeeze2 = nn.Conv2d(512, 128, 1)
-        self.squeeze3 = nn.Conv2d(1024, 256, 1)
-        
-        self.fc1 = self._construct_fc_layer([num_classes], 512)
-        self.fc2 = self._construct_fc_layer([num_classes], 1024)
-        self.fc3 = self._construct_fc_layer([num_classes], 2048)
-
         self.lifting_pool = []
         for m in self.modules():
             if isinstance(m, Lifting_down):
@@ -148,40 +136,20 @@ class dev_model(nn.Module):
         
         # layer1
         x = self.layer1(x)
-        x1 = self.lifting1(x)
-        x1 = torch.cat(x1, dim = 1)
-        x1 = self.energy_filter(x1)
         
         # layer2
         x = self.layer2(x)
-        x = x1 + x
-        x2 = self.lifting2(x)
-        x2 = torch.cat(x2, dim = 1)
-        x2 = self.energy_filter(x2)
         
-        #layer3
+        # layer3
         x = self.layer3(x)
-        x = x2 + x
-        x3 = self.lifting3(x)
-        x3 = torch.cat(x3, dim = 1)
-        x3 = self.energy_filter(x3)
         
+        # layer4
         x = self.layer4(x)
-        x = x3 + x
         
         x = self.avg(x).view(x.shape[0], -1)
         x = self.fc(x)
         
-        x1 = self.avg(x1).view(x1.shape[0], -1)
-        x1 = self.fc1(x1)
-        
-        x2 = self.avg(x2).view(x2.shape[0], -1)
-        x2 = self.fc2(x2)
-        
-        x3 = self.avg(x3).view(x3.shape[0], -1)
-        x3 = self.fc3(x3)
-        
-        return x, x1, x2, x3
+        return x
     
     
 def dev_mod(num_classes = 1000):
@@ -198,7 +166,6 @@ if __name__ == "__main__":
 #         {'params' : [param for name, param in model.named_parameters() if name == "Lifting_down"], 'lr' : 1e-2},
 #         ], lr = 1e-4, weight_decay = 1e-4)
 # =============================================================================
-    print(optim)
 # =============================================================================
 #     param = torch.load('../pkl/fold_0_best_20210408-3.pkl')
 #     model.load_state_dict(param)
