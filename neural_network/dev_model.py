@@ -52,7 +52,7 @@ class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3,
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -66,9 +66,18 @@ class dev_model(nn.Module):
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
         
-        self.lifting1 = Lifting_down(256, 4)
-        self.lifting2 = Lifting_down(512, 4)
+        self.lifting1 = Lifting_down(256, 2)
+        self.lifting2 = Lifting_down(512, 2)
+        self.lifting3 = Lifting_down(1024, 2)
         
+        self.squeeze1 = nn.Conv2d(256, 64, 1)
+        self.squeeze2 = nn.Conv2d(512, 128, 1)
+        self.squeeze3 = nn.Conv2d(1024, 256, 1)
+        
+        self.fc1 = self._construct_fc_layer([num_classes], 512)
+        self.fc2 = self._construct_fc_layer([num_classes], 1024)
+        self.fc3 = self._construct_fc_layer([num_classes], 2048)
+
         self.lifting_pool = []
         for m in self.modules():
             if isinstance(m, Lifting_down):
@@ -119,6 +128,17 @@ class dev_model(nn.Module):
         self.feature_dim = fc_dims[-1]
         
         return nn.Sequential(*layers)
+    
+    def energy_filter(self, x):
+        batch, channel, height, width = x.shape
+        x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
+        x_energe_index = torch.argsort(x_energe, dim = 1)
+        x_energe_index = x_energe_index[:, :channel // 2]#:x_energe_index.shape[1] // 2]
+        x = x.reshape(-1, height, width)
+        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).cuda() * channel
+        x = x[x_energe_index.reshape(-1)]
+        x = x.reshape(batch, -1, height, width)
+        return x
         
     def forward(self, x):
         x = self.conv1(x)
@@ -126,23 +146,42 @@ class dev_model(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
         
+        # layer1
         x = self.layer1(x)
-        x1 = x
-        x1 = self.lifting1(x1)
+        x1 = self.lifting1(x)
         x1 = torch.cat(x1, dim = 1)
+        x1 = self.energy_filter(x1)
         
+        # layer2
         x = self.layer2(x)
-        x2 = x
-        x2 = self.lifting2(x2)
+        x = x1 + x
+        x2 = self.lifting2(x)
         x2 = torch.cat(x2, dim = 1)
+        x2 = self.energy_filter(x2)
         
+        #layer3
         x = self.layer3(x)
-        x = self.layer4(x + x1)
-        x = x + x2
+        x = x2 + x
+        x3 = self.lifting3(x)
+        x3 = torch.cat(x3, dim = 1)
+        x3 = self.energy_filter(x3)
+        
+        x = self.layer4(x)
+        x = x3 + x
         
         x = self.avg(x).view(x.shape[0], -1)
         x = self.fc(x)
-        return x
+        
+        x1 = self.avg(x1).view(x1.shape[0], -1)
+        x1 = self.fc1(x1)
+        
+        x2 = self.avg(x2).view(x2.shape[0], -1)
+        x2 = self.fc2(x2)
+        
+        x3 = self.avg(x3).view(x3.shape[0], -1)
+        x3 = self.fc3(x3)
+        
+        return x, x1, x2, x3
     
     
 def dev_mod(num_classes = 1000):
@@ -168,7 +207,7 @@ if __name__ == "__main__":
     loss_f = torch.nn.CrossEntropyLoss()
     
     label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(100):
+    for i in range(10):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
@@ -177,5 +216,4 @@ if __name__ == "__main__":
         optim.step()
         for j in range(len(model.lifting_pool)):
             model.lifting_pool[j].filter_constraint()
-        print()
     #model.lifting_pool[0].filter_constraint()

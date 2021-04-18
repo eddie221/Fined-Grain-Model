@@ -19,6 +19,7 @@ from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, 
 from sklearn.model_selection import KFold
 import tqdm
 import os
+import logging
 
 if not os.path.exists('./pkl/{}/'.format(INDEX)):
     os.mkdir('./pkl/{}/'.format(INDEX))
@@ -189,10 +190,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     for optimizer in optimizers:
         optimizer.zero_grad() 
     output_1 = model(b_data)
-    _, predicted = torch.max(output_1.data, 1)
+    _, predicted = torch.max(output_1[0].data + output_1[1].data + output_1[2].data + output_1[3].data, 1)
     
     #loss function
-    cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
+    cls_loss = loss_func[0](output_1[0], b_label) + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label)
     loss = cls_loss
     
     for j in range(len(model.lifting_pool)):
@@ -230,6 +231,8 @@ def training(job):
         for epoch in range(1, EPOCH + 1):
             start = time.time()
             print('Fold {}/{} Epoch {}/{}'.format(index + 1, KFOLD, epoch, EPOCH))
+            logging.info("-" * 15)
+            logging.info('Fold {}/{} Epoch {}/{}'.format(index + 1, KFOLD, epoch, EPOCH))
             print('-' * 10)
             if CON_MATRIX:
                 confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
@@ -254,7 +257,6 @@ def training(job):
                     step += 1
                     if CON_MATRIX:
                         np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
-
                 if max_acc[phase].avg < correct_t.avg:
                     last_acc[phase] = max_acc[phase]
                     max_acc[phase] = correct_t
@@ -265,7 +267,8 @@ def training(job):
                         save_data = model.state_dict()
                         print('save')
                         torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
-                        
+                logging.info("{} set loss : {:.6f}".format(phase, loss_t.avg))        
+                logging.info("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))        
                 print('Index : {}'.format(INDEX))
                 print("dataset : {}".format(data_dir))
                 print("Model name : {}".format(model_name))
@@ -337,4 +340,7 @@ def rand_bbox(size, lam):
     return bbx1, bby1, bbx2, bby2
 
 if __name__ == '__main__':
+    logging.basicConfig(filename = './pkl/{}/logging.txt'.format(INDEX), level=logging.DEBUG)
+    logging.info('Index : {}'.format(INDEX))
+    logging.info("dataset : {}".format(data_dir))
     training = training(['train', 'val'])
