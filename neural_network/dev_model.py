@@ -9,6 +9,7 @@ Created on Tue Mar 23 16:34:25 2021
 import torch
 import torch.nn as nn
 from neural_network.lifting_pool import Lifting_down
+from neural_network.cofe import cofeature_fast
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -64,7 +65,18 @@ class dev_model(nn.Module):
         self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 2048)
+        self.fc = self._construct_fc_layer([num_classes], 2048 * 2)
+        
+        self.squeeze3 = nn.Conv2d(1024, 128, 1)
+        
+        self.lifting3 = Lifting_down(128, 2)
+        self.cofe3 = cofeature_fast(3)
+        self.squeeze_ll = nn.Conv1d(5, 1, 1, bias = False)
+        self.squeeze_hl = nn.Conv1d(5, 1, 1, bias = False)
+        self.squeeze_lh = nn.Conv1d(5, 1, 1, bias = False)
+        self.squeeze_hh = nn.Conv1d(5, 1, 1, bias = False)
+        self.squeeze_all = nn.Conv1d(4, 1, 1, bias = False)
+        self.fc_cofe = self._construct_fc_layer([2048], 16384)
         
         self.lifting_pool = []
         for m in self.modules():
@@ -142,11 +154,27 @@ class dev_model(nn.Module):
         
         # layer3
         x = self.layer3(x)
+        x3 = self.squeeze3(x)
+        x3 = self.lifting3(x3)
+        
+        cofe_ll = self.cofe3(x3[0])
+        cofe_hl = self.cofe3(x3[1])
+        cofe_lh = self.cofe3(x3[2])
+        cofe_hh = self.cofe3(x3[3])
+        
+        cofe_ll = self.squeeze_ll(cofe_ll)
+        cofe_hl = self.squeeze_hl(cofe_hl)
+        cofe_lh = self.squeeze_lh(cofe_lh)
+        cofe_hh = self.squeeze_hh(cofe_hh)
+        
+        cofe_all = self.squeeze_all(torch.cat([cofe_ll, cofe_hl, cofe_lh, cofe_hh], dim = 1)).squeeze(1)
+        cofe_all = self.fc_cofe(cofe_all)
         
         # layer4
         x = self.layer4(x)
         
         x = self.avg(x).view(x.shape[0], -1)
+        x = torch.cat([x, cofe_all], dim = 1)
         x = self.fc(x)
         
         return x

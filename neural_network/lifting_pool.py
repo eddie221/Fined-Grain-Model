@@ -15,12 +15,6 @@ class Lifting_down(nn.Module):
         self.pad_mode = pad_mode
         self.pad_place = pad_place
         self.kernel_size = kernel_size
-# =============================================================================
-#         self.low_pass_filter_h = nn.Conv2d(channel, channel, kernel_size = (1, self.kernel_size), stride = (1, self.kernel_size), bias = False, groups = channel)
-#         self.high_pass_filter_h = nn.Conv2d(channel, channel, kernel_size = (1, self.kernel_size), stride = (1, self.kernel_size), bias = False, groups = channel)
-#         self.low_pass_filter_v = nn.Conv2d(channel, channel, kernel_size = (self.kernel_size, 1), stride = (self.kernel_size, 1), bias = False, groups = channel)
-#         self.high_pass_filter_v = nn.Conv2d(channel, channel, kernel_size = (self.kernel_size, 1), stride = (self.kernel_size, 1), bias = False, groups = channel)
-# =============================================================================
         
         self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
@@ -30,12 +24,6 @@ class Lifting_down(nn.Module):
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
     def filter_constraint(self):
-# =============================================================================
-#         self.low_pass_filter_h.weight = nn.Parameter(self.low_pass_filter_h.weight.data / torch.sum(self.low_pass_filter_h.weight.data, dim = 3, keepdim = True))
-#         self.high_pass_filter_h.weight = nn.Parameter(self.high_pass_filter_h.weight.data - torch.mean(self.high_pass_filter_h.weight.data, dim = 3, keepdim = True))
-#         self.low_pass_filter_v.weight = nn.Parameter(self.low_pass_filter_v.weight.data / torch.sum(self.low_pass_filter_v.weight.data, dim = 2, keepdim = True))
-#         self.high_pass_filter_v.weight = nn.Parameter(self.high_pass_filter_v.weight.data - torch.mean(self.high_pass_filter_v.weight.data, dim = 2, keepdim = True))
-# =============================================================================
         self.low_pass_filter_h.data = self.low_pass_filter_h / torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True)
         self.high_pass_filter_h.data = self.high_pass_filter_h - torch.mean(self.high_pass_filter_h, dim = 3, keepdim = True)
         self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
@@ -60,15 +48,6 @@ class Lifting_down(nn.Module):
         x_hh = torch.nn.functional.conv2d(x_h, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.kernel_size, 1))
         del x_l
         del x_h
-# =============================================================================
-#         x_l = self.low_pass_filter_h(x)
-#         x_h = self.high_pass_filter_h(x)
-#         
-#         x_ll = self.low_pass_filter_v(x_l)
-#         x_hl = self.high_pass_filter_v(x_l)
-#         x_lh = self.low_pass_filter_v(x_h)
-#         x_hh = self.high_pass_filter_v(x_h)
-# =============================================================================
         
         return x_ll, x_hl, x_lh, x_hh
 
