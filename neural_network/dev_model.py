@@ -11,29 +11,48 @@ import torch.nn as nn
 from neural_network.lifting_pool import Lifting_down
 from neural_network.cofe import cofeature_fast
 
+def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, lifting = False):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
         super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
-                               padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes * 4)
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        width = int(planes * (base_width / 64.)) * groups
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(inplanes, width)
+        self.bn1 = norm_layer(width)
+        self.lifting = None
+        if stride == 1:
+            self.conv2 = conv3x3(width, width, stride, groups, dilation)
+        else:
+            self.conv2 = conv3x3(width, width, groups, dilation)
+            self.lifting = Lifting_down(width, 2, part = 4)
+        self.bn2 = norm_layer(width)
+        self.conv3 = conv1x1(width, planes * self.expansion)
+        self.bn3 = norm_layer(planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
 
     def forward(self, x):
-        residual = x
+        identity = x
 
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-
+        if self.lifting is not None:
+            out = self.lifting(out)
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
@@ -42,9 +61,9 @@ class Bottleneck(nn.Module):
         out = self.bn3(out)
 
         if self.downsample is not None:
-            residual = self.downsample(x)
+            identity = self.downsample(x)
 
-        out += residual
+        out += identity
         out = self.relu(out)
 
         return out
@@ -53,11 +72,12 @@ class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
+        self.lifting1 = Lifting_down(64, 2, part = 4)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.lifting2 = Lifting_down(64, 3, 2, part = 4, pad_mode = "pad0")
+        #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
         self.layer2 = self._make_layer(Bottleneck, 128, 4, stride = 2)
@@ -65,18 +85,7 @@ class dev_model(nn.Module):
         self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
-        self.fc = self._construct_fc_layer([num_classes], 2048 * 2)
-        
-        self.squeeze3 = nn.Conv2d(1024, 128, 1)
-        
-        self.lifting3 = Lifting_down(128, 2)
-        self.cofe3 = cofeature_fast(3)
-        self.squeeze_ll = nn.Conv1d(5, 1, 1, bias = False)
-        self.squeeze_hl = nn.Conv1d(5, 1, 1, bias = False)
-        self.squeeze_lh = nn.Conv1d(5, 1, 1, bias = False)
-        self.squeeze_hh = nn.Conv1d(5, 1, 1, bias = False)
-        self.squeeze_all = nn.Conv1d(4, 1, 1, bias = False)
-        self.fc_cofe = self._construct_fc_layer([2048], 16384)
+        self.fc = self._construct_fc_layer([num_classes], 2048)
         
         self.lifting_pool = []
         for m in self.modules():
@@ -87,12 +96,17 @@ class dev_model(nn.Module):
     def _make_layer(self, block, planes, blocks, stride = 1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
+            if stride == 1:
+                downsample = nn.Sequential(
+                    nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                    nn.BatchNorm2d(planes * block.expansion),
+                )
+            else:
+                downsample = nn.Sequential(
+                    nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
+                    Lifting_down(planes * block.expansion, 2, part = 4),
+                    nn.BatchNorm2d(planes * block.expansion),
+                )
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
@@ -129,22 +143,14 @@ class dev_model(nn.Module):
         
         return nn.Sequential(*layers)
     
-    def energy_filter(self, x):
-        batch, channel, height, width = x.shape
-        x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-        x_energe_index = torch.argsort(x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // 2]#:x_energe_index.shape[1] // 2]
-        x = x.reshape(-1, height, width)
-        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).cuda() * channel
-        x = x[x_energe_index.reshape(-1)]
-        x = x.reshape(batch, -1, height, width)
-        return x
-        
     def forward(self, x):
         x = self.conv1(x)
+        x = self.lifting1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.maxpool(x)
+        x = self.lifting2(x)
+        #x = self.maxpool(x)
+        # 64, 112, 112
         
         # layer1
         x = self.layer1(x)
@@ -154,27 +160,11 @@ class dev_model(nn.Module):
         
         # layer3
         x = self.layer3(x)
-        x3 = self.squeeze3(x)
-        x3 = self.lifting3(x3)
-        
-        cofe_ll = self.cofe3(x3[0])
-        cofe_hl = self.cofe3(x3[1])
-        cofe_lh = self.cofe3(x3[2])
-        cofe_hh = self.cofe3(x3[3])
-        
-        cofe_ll = self.squeeze_ll(cofe_ll)
-        cofe_hl = self.squeeze_hl(cofe_hl)
-        cofe_lh = self.squeeze_lh(cofe_lh)
-        cofe_hh = self.squeeze_hh(cofe_hh)
-        
-        cofe_all = self.squeeze_all(torch.cat([cofe_ll, cofe_hl, cofe_lh, cofe_hh], dim = 1)).squeeze(1)
-        cofe_all = self.fc_cofe(cofe_all)
         
         # layer4
         x = self.layer4(x)
         
         x = self.avg(x).view(x.shape[0], -1)
-        x = torch.cat([x, cofe_all], dim = 1)
         x = self.fc(x)
         
         return x
@@ -188,6 +178,8 @@ if __name__ == "__main__":
     model = dev_model(9).cuda()
     a = torch.randn([8, 3, 224, 224]).cuda()
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
+    with open('../lifting.txt', 'w') as f:
+        print(model, file = f)
 # =============================================================================
 #     optim = torch.optim.Adam([
 #         {'params' : [param for name, param in model.named_parameters() if name != "Lifting_down"]},
@@ -212,3 +204,4 @@ if __name__ == "__main__":
         for j in range(len(model.lifting_pool)):
             model.lifting_pool[j].filter_constraint()
     #model.lifting_pool[0].filter_constraint()
+
