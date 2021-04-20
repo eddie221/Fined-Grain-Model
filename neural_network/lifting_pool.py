@@ -44,7 +44,7 @@ class Lifting_down(nn.Module):
         x_energe_index = torch.argsort(x_energe, dim = 1)
         x_energe_index = x_energe_index[:, :channel // part]#:x_energe_index.shape[1] // 2]
         x = x.reshape(-1, height, width)
-        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).cuda() * channel
+        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
         x = x[x_energe_index.reshape(-1)]
         x = x.reshape(batch, -1, height, width)
         return x

@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -202,9 +202,6 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         for optimizer in optimizers:
             optimizer.step()
             
-    for j in range(len(model.lifting_pool)):
-        model.lifting_pool[j].filter_constraint()
-    
     return loss.item(), predicted.detach().cpu()
 
 #training
