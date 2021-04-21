@@ -26,6 +26,10 @@ class Lifting_down(nn.Module):
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
+        self.avg = nn.AdaptiveAvgPool2d(1)
+        self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
+                                nn.ReLU(),
+                                nn.Linear(channel // 2, channel))
         self.filter_constraint()
     
     def __repr__(self):
@@ -50,6 +54,13 @@ class Lifting_down(nn.Module):
         x = x.reshape(batch, -1, height, width)
         return x
     
+    def attention(self, x):
+        x_att = self.avg(x).squeeze(-1).squeeze(-1)
+        x_att = self.SE(x_att)
+        
+        x = x * x_att.unsqueeze(-1).unsqueeze(-1)
+        return x
+    
     def forward(self, x):
         # pad the feature map
         batch, channel, height, width = x.shape
@@ -72,6 +83,7 @@ class Lifting_down(nn.Module):
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
         x_all = self.squeeze(x_all)
+        x_all = self.attention(x_all)
         
         return x_all
 
