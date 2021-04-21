@@ -25,6 +25,7 @@ class Lifting_down(nn.Module):
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
+        self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
         self.filter_constraint()
     
     def __repr__(self):
@@ -69,7 +70,10 @@ class Lifting_down(nn.Module):
         del x_l
         del x_h
         
-        return self.energy_filter(torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1), self.part)
+        x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+        x_all = self.squeeze(x_all)
+        
+        return x_all
 
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
     if pad_mode == 'discard':
