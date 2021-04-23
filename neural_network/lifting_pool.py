@@ -29,7 +29,8 @@ class Lifting_down(nn.Module):
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
                                 nn.ReLU(),
-                                nn.Linear(channel // 2, channel))
+                                nn.Linear(channel // 2, channel),
+                                nn.Sigmoid())
         self.filter_constraint()
     
     def __repr__(self):
