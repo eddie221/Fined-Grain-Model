@@ -55,12 +55,14 @@ class Lifting_down(nn.Module):
         x = x.reshape(batch, -1, height, width)
         return x
     
-    def attention(self, x):
-        x_att = self.avg(x).squeeze(-1).squeeze(-1)
-        x_att = self.SE(x_att)
-        
-        x = x * x_att.unsqueeze(-1).unsqueeze(-1)
-        return x
+# =============================================================================
+#     def attention(self, x):
+#         x_att = self.avg(x).squeeze(-1).squeeze(-1)
+#         x_att = self.SE(x_att)
+#         
+#         x = x * x_att.unsqueeze(-1).unsqueeze(-1)
+#         return x
+# =============================================================================
     
     def forward(self, x):
         # pad the feature map
@@ -84,7 +86,7 @@ class Lifting_down(nn.Module):
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
         x_all = self.squeeze(x_all)
-        x_all = self.attention(x_all)
+        #x_all = self.attention(x_all)
         
         return x_all
 

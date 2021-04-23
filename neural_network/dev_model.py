@@ -73,7 +73,7 @@ class dev_model(nn.Module):
         super(dev_model, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = Lifting_down(64, 2, part = 4)
+        self.lifting1 = Lifting_down(64, 3, 2, part = 4, pad_mode = "pad0")
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.lifting2 = Lifting_down(64, 3, 2, part = 4, pad_mode = "pad0")
@@ -104,7 +104,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion, 2, part = 4),
+                    Lifting_down(planes * block.expansion, 3, stride = 2, pad_mode="pad0", part = 4),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -157,7 +157,7 @@ class dev_model(nn.Module):
         
         # layer2
         x = self.layer2(x)
-        
+
         # layer3
         x = self.layer3(x)
         
@@ -175,8 +175,8 @@ def dev_mod(num_classes = 1000):
     return model
     
 if __name__ == "__main__":
-    model = dev_model(9).cuda()
-    a = torch.randn([8, 3, 224, 224]).cuda()
+    model = dev_model(9)
+    a = torch.randn([2, 3, 224, 224])
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     with open('../lifting.txt', 'w') as f:
         print(model, file = f)
@@ -193,8 +193,8 @@ if __name__ == "__main__":
     
     loss_f = torch.nn.CrossEntropyLoss()
     
-    label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(10):
+    label = torch.tensor([0, 1])
+    for i in range(3):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
