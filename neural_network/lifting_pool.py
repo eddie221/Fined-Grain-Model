@@ -78,7 +78,7 @@ class Lifting_down(nn.Module):
         x_att = self.avg(x).squeeze(-1).squeeze(-1)
         x_att = self.SE(x_att)
         
-        x = x * x_att.unsqueeze(-1).unsqueeze(-1)
+        x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
         return x
     
     def forward(self, x):
