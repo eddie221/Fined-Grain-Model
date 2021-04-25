@@ -20,7 +20,7 @@ class Lifting_down(nn.Module):
         self.stride = stride
         if self.stride is None:
             self.stride = kernel_size
-            
+        
         self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
@@ -31,11 +31,30 @@ class Lifting_down(nn.Module):
                                 nn.ReLU(),
                                 nn.Linear(channel // 2, channel),
                                 nn.Sigmoid())
-        self.filter_constraint()
+        #self.filter_constraint()
     
     def __repr__(self):
         struct = "Lifting({}, kernel_size={}, stride={}, part={})".format(self.channel, self.kernel_size, self.stride, self.part)
         return struct
+    
+    def regular_term_loss(self):
+        # low pass filter sum = 1
+        constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
+                      torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
+        # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
+        constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
+            torch.sum(torch.pow(1 - self.high_pass_filter_h, 2), dim = 3) +\
+            torch.sum(torch.pow(1 - self.high_pass_filter_v, 2), dim = 2), dim = 0).squeeze(-1)
+            
+        if self.kernel_size % 2 == 1:
+            # let center weight become 0
+            constraint3 = torch.sum(self.low_pass_filter_h[:, :, :, self.kernel_size // 2] +\
+                          self.high_pass_filter_h[:, :, :, self.kernel_size // 2] +\
+                          self.low_pass_filter_v[:, :, self.kernel_size // 2, :] +\
+                          self.high_pass_filter_v[:, :, self.kernel_size // 2, :], dim = 0).squeeze(-1)
+            return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
+        else:
+            return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
     def filter_constraint(self):
@@ -55,14 +74,12 @@ class Lifting_down(nn.Module):
         x = x.reshape(batch, -1, height, width)
         return x
     
-# =============================================================================
-#     def attention(self, x):
-#         x_att = self.avg(x).squeeze(-1).squeeze(-1)
-#         x_att = self.SE(x_att)
-#         
-#         x = x * x_att.unsqueeze(-1).unsqueeze(-1)
-#         return x
-# =============================================================================
+    def attention(self, x):
+        x_att = self.avg(x).squeeze(-1).squeeze(-1)
+        x_att = self.SE(x_att)
+        
+        x = x * x_att.unsqueeze(-1).unsqueeze(-1)
+        return x
     
     def forward(self, x):
         # pad the feature map
@@ -86,7 +103,7 @@ class Lifting_down(nn.Module):
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
         x_all = self.squeeze(x_all)
-        #x_all = self.attention(x_all)
+        x_all = self.attention(x_all)
         
         return x_all
 
@@ -144,7 +161,7 @@ if __name__ == "__main__":
     image = torch.randn([2, 3, 4, 4])
     pool = Lifting_down(3, kernel_size = 2)
     output = pool(image)
-    print(output[0])
+    print(pool.regular_term_loss())
     pool.filter_constraint()
 # =============================================================================
 #     ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')

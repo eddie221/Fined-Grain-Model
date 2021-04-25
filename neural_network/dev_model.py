@@ -1,8 +1,8 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Tue Mar 23 16:34:25 2021
-
 @author: mmplab603
 """
 
@@ -37,7 +37,7 @@ class Bottleneck(nn.Module):
             self.conv2 = conv3x3(width, width, stride, groups, dilation)
         else:
             self.conv2 = conv3x3(width, width, groups, dilation)
-            self.lifting = Lifting_down(width, 2, part = 4)
+            self.lifting = Lifting_down(width, 3, stride = 2, pad_mode = 'pad0', part = 4)
         self.bn2 = norm_layer(width)
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
@@ -73,10 +73,10 @@ class dev_model(nn.Module):
         super(dev_model, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = Lifting_down(64, 3, 2, part = 4, pad_mode = "pad0")
+        self.lifting1 = Lifting_down(64, 3, 2, pad_mode = "pad0")
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = Lifting_down(64, 3, 2, part = 4, pad_mode = "pad0")
+        self.lifting2 = Lifting_down(64, 3, 2, pad_mode = "pad0")
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
@@ -104,7 +104,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion, 3, stride = 2, pad_mode="pad0", part = 4),
+                    Lifting_down(planes * block.expansion, 2, part = 4),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -118,7 +118,6 @@ class dev_model(nn.Module):
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
         """
         Construct fully connected layer
-
         - fc_dims (list or tuple): dimensions of fc layers, if None,
                                    no fc layers are constructed
         - input_dim (int): input dimension
@@ -157,7 +156,7 @@ class dev_model(nn.Module):
         
         # layer2
         x = self.layer2(x)
-
+        
         # layer3
         x = self.layer3(x)
         
@@ -175,8 +174,8 @@ def dev_mod(num_classes = 1000):
     return model
     
 if __name__ == "__main__":
-    model = dev_model(9)
-    a = torch.randn([2, 3, 224, 224])
+    model = dev_model(9).cuda()
+    a = torch.randn([8, 3, 224, 224]).cuda()
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     with open('../lifting.txt', 'w') as f:
         print(model, file = f)
@@ -193,15 +192,15 @@ if __name__ == "__main__":
     
     loss_f = torch.nn.CrossEntropyLoss()
     
-    label = torch.tensor([0, 1])
-    for i in range(3):
+    label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
+    for i in range(100):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
-        
+        for j in range(len(model.lifting_pool)):
+            loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
+        print(loss)
         loss.backward()
         optim.step()
-        for j in range(len(model.lifting_pool)):
-            model.lifting_pool[j].filter_constraint()
+        
     #model.lifting_pool[0].filter_constraint()
-
