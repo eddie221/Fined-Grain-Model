@@ -104,7 +104,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion, 2, part = 4),
+                    Lifting_down(planes * block.expansion, 3, stride = 2, pad_mode = "pad0", part = 4),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
