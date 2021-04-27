@@ -42,19 +42,14 @@ class Lifting_down(nn.Module):
         constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
                       torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
-        constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
-            torch.sum(torch.pow(1 - self.high_pass_filter_h, 2), dim = 3) +\
-            torch.sum(torch.pow(1 - self.high_pass_filter_v, 2), dim = 2), dim = 0).squeeze(-1)
-            
-        if self.kernel_size % 2 == 1:
-            # let center weight become 0
-            constraint3 = torch.sum(self.low_pass_filter_h[:, :, :, self.kernel_size // 2] +\
-                          self.high_pass_filter_h[:, :, :, self.kernel_size // 2] +\
-                          self.low_pass_filter_v[:, :, self.kernel_size // 2, :] +\
-                          self.high_pass_filter_v[:, :, self.kernel_size // 2, :], dim = 0).squeeze(-1)
-            return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
-        else:
-            return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
+# =============================================================================
+#         constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
+#             torch.sum(torch.pow(1 - self.high_pass_filter_h, 2), dim = 3) +\
+#             torch.sum(torch.pow(1 - self.high_pass_filter_v, 2), dim = 2), dim = 0).squeeze(-1)
+# =============================================================================
+        constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
+                       torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2), dim = 0).squeeze(-1)
+        return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
     def filter_constraint(self):
@@ -103,7 +98,7 @@ class Lifting_down(nn.Module):
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
         x_all = self.squeeze(x_all)
-        x_all = self.attention(x_all)
+        #x_all = self.attention(x_all)
         
         return x_all
 

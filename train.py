@@ -16,6 +16,9 @@ from PIL import Image
 import numpy as np
 import time
 from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX, KFOLD
+if KFOLD == 1:
+    from config import VAL_SPLIT
+from torch.utils.data.sampler import SubsetRandomSampler
 from sklearn.model_selection import KFold
 import tqdm
 import os
@@ -27,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -76,12 +79,26 @@ def load_data():
             dataloader.append({'train' : trainloader, 'val' : valloader})
             dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
     else:
-        dataloader.append(torch.utils.data.DataLoader(all_image_datasets,
-                                                    batch_size = BATCH_SIZE,
-                                                    #sampler = data_sampler[x],
-                                                    shuffle = True,
-                                                    num_workers = 16))
-        dataset_sizes.append(len(all_image_datasets))
+        indices = list(range(len(all_image_datasets)))
+        dataset_size = len(all_image_datasets)
+        split = int(np.floor(VAL_SPLIT * dataset_size))
+        np.random.seed(0)
+        np.random.shuffle(indices)
+        train_indices, val_indices = indices[split:], indices[:split]
+        train_sampler = SubsetRandomSampler(train_indices)
+        valid_sampler = SubsetRandomSampler(val_indices)
+        trainloader = torch.utils.data.DataLoader(all_image_datasets,
+                                                       batch_size = BATCH_SIZE,
+                                                       sampler = train_sampler,
+                                                       num_workers = 16)
+        valloader = torch.utils.data.DataLoader(all_image_datasets,
+                                                       batch_size = BATCH_SIZE,
+                                                       sampler = valid_sampler,
+                                                       num_workers = 16)
+        dataloader.append({'train' : trainloader, 'val' : valloader})
+        dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
+        
+        
     return dataloader, dataset_sizes, all_image_datasets
 # =============================================================================
 #     dataset_sizes = len(all_image_datasets)
@@ -121,7 +138,7 @@ def create_opt_loss(model):
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[60, 110, 140], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[75, 150, 210], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
@@ -267,6 +284,7 @@ def training(job):
                         save_data = model.state_dict()
                         print('save')
                         torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
+                        
                 logging.info("{} set loss : {:.6f}".format(phase, loss_t.avg))        
                 logging.info("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))        
                 print('Index : {}'.format(INDEX))
