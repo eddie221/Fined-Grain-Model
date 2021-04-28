@@ -98,7 +98,7 @@ class Lifting_down(nn.Module):
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
         x_all = self.squeeze(x_all)
-        #x_all = self.attention(x_all)
+        x_all = self.attention(x_all)
         
         return x_all
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     image = torch.randn([2, 3, 4, 4])
     pool = Lifting_down(3, kernel_size = 2)
     output = pool(image)
-    print(pool.regular_term_loss())
+    print(pool.regular_term_loss() * 1e-4)
     pool.filter_constraint()
 # =============================================================================
 #     ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')

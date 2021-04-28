@@ -138,7 +138,7 @@ def create_opt_loss(model):
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[75, 150, 210], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[100, 175, 225], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
