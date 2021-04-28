@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 
 class Lifting_down(nn.Module):
-    def __init__(self, channel, kernel_size = 2, stride = None, part = 2, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
+    def __init__(self, channel, kernel_size = 2, stride = None, part = 2, pad_mode = 'discard', pad_place = [0, 1, 0, 1], squeeze = True):
         super(Lifting_down, self).__init__()
         self.pad_mode = pad_mode
         self.pad_place = pad_place
@@ -25,16 +25,25 @@ class Lifting_down(nn.Module):
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
-        self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
-        self.avg = nn.AdaptiveAvgPool2d(1)
-        self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
+        
+        self.squeeze = None
+        if squeeze:
+            self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
+            self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
                                 nn.ReLU(),
                                 nn.Linear(channel // 2, channel),
                                 nn.Sigmoid())
+        else:
+            self.SE = nn.Sequential(nn.Linear(channel * 4, channel * 2),
+                            nn.ReLU(),
+                            nn.Linear(channel * 2, channel * 4),
+                            nn.Sigmoid())
+        self.avg = nn.AdaptiveAvgPool2d(1)
+        
         #self.filter_constraint()
     
     def __repr__(self):
-        struct = "Lifting({}, kernel_size={}, stride={}, part={})".format(self.channel, self.kernel_size, self.stride, self.part)
+        struct = "Lifting({}, kernel_size={}, stride={}, part={}, squeeze={})".format(self.channel, self.kernel_size, self.stride, self.part, True if self.squeeze is not None else False)
         return struct
     
     def regular_term_loss(self):
@@ -97,7 +106,8 @@ class Lifting_down(nn.Module):
         del x_h
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
-        x_all = self.squeeze(x_all)
+        if self.squeeze is not None:
+            x_all = self.squeeze(x_all)
         x_all = self.attention(x_all)
         
         return x_all

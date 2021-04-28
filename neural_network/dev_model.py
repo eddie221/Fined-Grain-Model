@@ -36,8 +36,9 @@ class Bottleneck(nn.Module):
         if stride == 1:
             self.conv2 = conv3x3(width, width, stride, groups, dilation)
         else:
+            self.squeeze = conv1x1(width, width // 4)
+            self.lifting = Lifting_down(width // 4, 3, stride = 2, pad_mode = 'pad0', part = 4, squeeze = False)
             self.conv2 = conv3x3(width, width, groups, dilation)
-            self.lifting = Lifting_down(width, 3, stride = 2, pad_mode = 'pad0', part = 4)
         self.bn2 = norm_layer(width)
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
@@ -52,7 +53,9 @@ class Bottleneck(nn.Module):
         out = self.bn1(out)
         out = self.relu(out)
         if self.lifting is not None:
+            out = self.squeeze(out)
             out = self.lifting(out)
+            
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
