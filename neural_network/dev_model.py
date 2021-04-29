@@ -174,8 +174,8 @@ def dev_mod(num_classes = 1000):
     return model
     
 if __name__ == "__main__":
-    model = dev_model(9).cuda()
-    a = torch.randn([8, 3, 224, 224]).cuda()
+    model = dev_model(9).to("cuda:0")
+    a = torch.randn([8, 3, 224, 224]).to("cuda:0")
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     with open('../lifting.txt', 'w') as f:
         print(model, file = f)
@@ -191,15 +191,13 @@ if __name__ == "__main__":
 # =============================================================================
     
     loss_f = torch.nn.CrossEntropyLoss()
-    
     label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(100):
+    for i in range(10):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
         for j in range(len(model.lifting_pool)):
             loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
-        print(loss)
         loss.backward()
         optim.step()
         
