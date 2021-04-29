@@ -30,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -239,7 +239,7 @@ def training(job):
         
     for index, image_data in enumerate(kfold_image_data):
         model = create_nn_model()
-        #model = load_param(model)
+        model = load_param(model)
         optimizers, lr_schedulers, loss_func = create_opt_loss(model)
         max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}
