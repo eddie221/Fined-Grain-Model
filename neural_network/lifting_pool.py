@@ -20,8 +20,10 @@ class Lifting_down(nn.Module):
         if self.stride is None:
             self.stride = kernel_size
         
-        self.low_pass_filter = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
-        self.high_pass_filter = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
+        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
+        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
+        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
+        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
@@ -36,16 +38,24 @@ class Lifting_down(nn.Module):
     
     def regular_term_loss(self):
         # low pass filter sum = 1
-        constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter, dim = 3, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
-        
-        # high pass filter sum = 0 & sum((1 - sum(weight) ** 2) ** 2) = 0 => limit high pass to unit length
-        constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3), 2), dim = 0).squeeze(-1)
+        constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
+                      torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
+        # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
+# =============================================================================
+#         constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
+#             torch.sum(torch.pow(1 - self.high_pass_filter_h, 2), dim = 3) +\
+#             torch.sum(torch.pow(1 - self.high_pass_filter_v, 2), dim = 2), dim = 0).squeeze(-1)
+# =============================================================================
+        constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
+                       torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2), dim = 0).squeeze(-1)
         return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
     def filter_constraint(self):
-        self.low_pass_filter.data = self.low_pass_filter / torch.sum(self.low_pass_filter, dim = 3, keepdim = True)
-        self.high_pass_filter.data = self.high_pass_filter - torch.mean(self.high_pass_filter, dim = 3, keepdim = True)
+        self.low_pass_filter_h.data = self.low_pass_filter_h / torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True)
+        self.high_pass_filter_h.data = self.high_pass_filter_h - torch.mean(self.high_pass_filter_h, dim = 3, keepdim = True)
+        self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
+        self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
     
     def energy_filter(self, x, part = 2):
         batch, channel, height, width = x.shape
@@ -76,12 +86,12 @@ class Lifting_down(nn.Module):
             x = torch.nn.functional.pad(x, pad = self.pad_place, mode = self.pad_mode)
             
         # calculate the lifting weight different weight
-        x_l = torch.nn.functional.conv2d(x, self.low_pass_filter, groups = x.shape[1], stride = (1, self.stride))
-        x_h = torch.nn.functional.conv2d(x, self.high_pass_filter, groups = x.shape[1], stride = (1, self.stride))
-        x_ll = torch.nn.functional.conv2d(x_l, self.low_pass_filter.permute(0, 1, 3, 2), groups = x_l.shape[1], stride = (self.stride, 1))
-        x_hl = torch.nn.functional.conv2d(x_l, self.high_pass_filter.permute(0, 1, 3, 2), groups = x_l.shape[1], stride = (self.stride, 1))
-        x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter.permute(0, 1, 3, 2), groups = x_l.shape[1], stride = (self.stride, 1))
-        x_hh = torch.nn.functional.conv2d(x_h, self.high_pass_filter.permute(0, 1, 3, 2), groups = x_l.shape[1], stride = (self.stride, 1))
+        x_l = torch.nn.functional.conv2d(x, self.low_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
+        x_h = torch.nn.functional.conv2d(x, self.high_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
+        x_ll = torch.nn.functional.conv2d(x_l, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
+        x_hl = torch.nn.functional.conv2d(x_l, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
+        x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
+        x_hh = torch.nn.functional.conv2d(x_h, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         del x_l
         del x_h
         
