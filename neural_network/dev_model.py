@@ -52,9 +52,9 @@ class Bottleneck(nn.Module):
         out = self.bn1(out)
         out = self.relu(out)
         
-        out = self.conv2(out)
         if self.lifting is not None:
             out = self.lifting(out)
+        out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
 

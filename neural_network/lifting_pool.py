@@ -30,7 +30,7 @@ class Lifting_down(nn.Module):
                                 nn.ReLU(),
                                 nn.Linear(channel // 2, channel),
                                 nn.Sigmoid())
-        #self.filter_constraint()
+        self.filter_constraint()
     
     def __repr__(self):
         struct = "Lifting({}, kernel_size={}, stride={}, part={})".format(self.channel, self.kernel_size, self.stride, self.part)
@@ -39,7 +39,7 @@ class Lifting_down(nn.Module):
     def regular_term_loss(self):
         # low pass filter sum = 1
         constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
-                      torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
+                                torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
 # =============================================================================
 #         constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
@@ -69,9 +69,9 @@ class Lifting_down(nn.Module):
         return x
     
     def attention(self, x):
-        x_att = self.avg(x).squeeze(-1).squeeze(-1)
+        x_att = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
+        #x_att = self.avg(x).squeeze(-1).squeeze(-1)
         x_att = self.SE(x_att)
-        
         x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
         return x
     
