@@ -7,7 +7,6 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.dev_model as model_net
-import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -16,7 +15,7 @@ import random
 from PIL import Image
 import numpy as np
 import time
-from config import BATCH_SIZE, IMAGE_SIZE, LR, NUM_CLASS, INDEX, EPOCH, REMAEK, CON_MATRIX, KFOLD
+from config import *
 if KFOLD == 1:
     from config import VAL_SPLIT
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -31,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -119,11 +118,13 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'Resnet50'
-    #model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'lifting_model'
+    model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
+    #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
+
     print(model)
-    #print("lifting : {}".format(len(model.lifting_pool)))
+    print("lifting : {}".format(len(model.lifting_pool)))
     return model
 
 def create_opt_loss(model):
@@ -212,10 +213,8 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
-# =============================================================================
-#     for j in range(len(model.lifting_pool)):
-#         loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
-# =============================================================================
+    for j in range(len(model.lifting_pool)):
+        loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
     
     if phase == 'train':
         loss.backward()
@@ -240,7 +239,11 @@ def training(job):
         
     for index, image_data in enumerate(kfold_image_data):
         model = create_nn_model()
-        #model = load_param(model)
+        if PRETRAIN:
+            print("Load pretrained")
+            model = load_param(model)
+        else:
+            print("Not load pretrained")
         optimizers, lr_schedulers, loss_func = create_opt_loss(model)
         max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}

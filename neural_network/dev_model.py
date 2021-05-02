@@ -51,9 +51,10 @@ class Bottleneck(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
+        
+        out = self.conv2(out)
         if self.lifting is not None:
             out = self.lifting(out)
-        out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
 
@@ -71,6 +72,7 @@ class Bottleneck(nn.Module):
 class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
+        self.name = "lifting_model"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.lifting1 = Lifting_down(64, 3, 2, pad_mode = "pad0")
@@ -192,7 +194,7 @@ if __name__ == "__main__":
     
     loss_f = torch.nn.CrossEntropyLoss()
     label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(10):
+    for i in range(1):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
