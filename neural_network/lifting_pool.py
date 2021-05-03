@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -9,12 +10,11 @@ import torch
 import torch.nn as nn
 
 class Lifting_down(nn.Module):
-    def __init__(self, channel, kernel_size = 2, stride = None, part = 2, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
+    def __init__(self, channel, kernel_size = 2, stride = None, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
         super(Lifting_down, self).__init__()
         self.pad_mode = pad_mode
         self.pad_place = pad_place
         self.kernel_size = kernel_size
-        self.part = part
         self.channel = channel
         self.stride = stride
         if self.stride is None:
@@ -24,7 +24,7 @@ class Lifting_down(nn.Module):
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
-        self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
+        self.squeeze = nn.Conv2d(channel * 3, channel, 1, bias = False)
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
                                 nn.ReLU(),
@@ -33,7 +33,7 @@ class Lifting_down(nn.Module):
         #self.filter_constraint()
     
     def __repr__(self):
-        struct = "Lifting({}, kernel_size={}, stride={}, part={})".format(self.channel, self.kernel_size, self.stride, self.part)
+        struct = "Lifting({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
         return struct
     
     def regular_term_loss(self):
@@ -57,11 +57,12 @@ class Lifting_down(nn.Module):
         self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
     
-    def energy_filter(self, x, part = 2):
+    def energy_filter(self, x):
         batch, channel, height, width = x.shape
         x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-        x_energe_index = torch.argsort(x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // part]#:x_energe_index.shape[1] // 2]
+        x_energe_index = torch.argsort(-x_energe, dim = 1)
+        x_energe_index = x_energe_index[:, :channel // 4 * 3]#:x_energe_index.shape[1] // 2]
+        x_energe_index, _ = torch.sort(x_energe_index)
         x = x.reshape(-1, height, width)
         x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
         x = x[x_energe_index.reshape(-1)]
@@ -96,6 +97,7 @@ class Lifting_down(nn.Module):
         del x_h
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+        x_all = self.energy_filter(x_all)
         x_all = self.squeeze(x_all)
         x_all = self.attention(x_all)
         
@@ -152,8 +154,8 @@ if __name__ == "__main__":
 # =============================================================================
     
     # test 2
-    image = torch.randn([2, 3, 4, 4])
-    pool = Lifting_down(3, kernel_size = 2)
+    image = torch.randn([2, 3, 4, 4]).cuda()
+    pool = Lifting_down(3, kernel_size = 2).cuda()
     output = pool(image)
     print(pool.regular_term_loss() * 1e-4)
     pool.filter_constraint()
