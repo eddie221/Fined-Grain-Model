@@ -30,7 +30,7 @@ class Lifting_down(nn.Module):
                                 nn.ReLU(),
                                 nn.Linear(channel // 2, channel),
                                 nn.Sigmoid())
-        self.filter_constraint()
+        #self.filter_constraint()
     
     def __repr__(self):
         struct = "Lifting({}, kernel_size={}, stride={}, part={})".format(self.channel, self.kernel_size, self.stride, self.part)
