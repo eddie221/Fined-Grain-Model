@@ -32,12 +32,7 @@ class Bottleneck(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
-        self.lifting = None
-        if stride == 1:
-            self.conv2 = conv3x3(width, width, stride, groups, dilation)
-        else:
-            self.conv2 = conv3x3(width, width, groups, dilation)
-            self.lifting = Lifting_down(width, 3, stride = 2, pad_mode = 'pad0')
+        self.conv2 = conv3x3(width, width, stride, groups, dilation)
         self.bn2 = norm_layer(width)
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
@@ -52,8 +47,6 @@ class Bottleneck(nn.Module):
         out = self.bn1(out)
         out = self.relu(out)
         
-        if self.lifting is not None:
-            out = self.lifting(out)
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
@@ -75,10 +68,10 @@ class dev_model(nn.Module):
         self.name = "lifting_model"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = Lifting_down(64, 3, 2, pad_mode = "pad0")
+        self.lifting1 = Lifting_down(64, 2, 2, pad_mode = "pad0")
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = Lifting_down(64, 3, 2, pad_mode = "pad0")
+        self.lifting2 = Lifting_down(64, 2, 2, pad_mode = "pad0")
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
@@ -106,7 +99,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion, 3, stride = 2, pad_mode = "pad0"),
+                    Lifting_down(planes * block.expansion, 2, stride = 2, pad_mode = "pad0"),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -179,6 +172,7 @@ if __name__ == "__main__":
     model = dev_model(9).to("cuda:0")
     a = torch.randn([8, 3, 224, 224]).to("cuda:0")
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
+    print(len(model.lifting_pool))
     with open('../lifting.txt', 'w') as f:
         print(model, file = f)
 # =============================================================================
@@ -201,6 +195,7 @@ if __name__ == "__main__":
         for j in range(len(model.lifting_pool)):
             loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
         loss.backward()
+        print(loss)
         optim.step()
         
     #model.lifting_pool[0].filter_constraint()

@@ -7,6 +7,7 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.dev_model as model_net
+import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -30,7 +31,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -60,7 +61,32 @@ data_transforms = {
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),
 }
+
+def load_data_cifar():
+    dataloader = []
+    dataset_sizes = []
+    trainset = torchvision.datasets.CIFAR10(root='./data',
+                                            train = True,
+                                            download = True,
+                                            transform = data_transforms['train'])
+    trainloader = torch.utils.data.DataLoader(trainset,
+                                              batch_size = BATCH_SIZE,
+                                              shuffle = True,
+                                              num_workers = 2)
     
+    testset = torchvision.datasets.CIFAR10(root='./data',
+                                           train = False,
+                                           download = True,
+                                           transform = data_transforms['train'])
+    testloader = torch.utils.data.DataLoader(testset,
+                                             batch_size = BATCH_SIZE,
+                                             shuffle = False,
+                                             num_workers = 2)
+    
+    dataloader.append({'train' : trainloader, 'val' : testloader})
+    dataset_sizes.append({'train' : len(trainloader), 'val' : len(testloader)})
+    
+    return dataloader, None
 
 
 def load_data():
@@ -123,7 +149,7 @@ def create_nn_model():
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    print("lifting : {}".format(len(model.lifting_pool)))
+    #print("lifting : {}".format(len(model.lifting_pool)))
     return model
 
 def create_opt_loss(model):
@@ -229,7 +255,8 @@ def training(job):
     global loss_function_select
     global model_name
     #with torch.autograd.set_detect_anomaly(True):
-    kfold_image_data, dataset_sizes, all_image_datasets = load_data()
+    #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
+    kfold_image_data, all_image_datasets = load_data_cifar()
     ACCMeters = []
     LOSSMeters = []
     for i in range(KFOLD):
@@ -263,10 +290,12 @@ def training(job):
                 
                 if phase == 'train':
                     model.train(True)
-                    all_image_datasets.transform = data_transforms['train']
+                    if all_image_datasets is not None:
+                        all_image_datasets.transform = data_transforms['train']
                 else:
                     model.train(False)
-                    all_image_datasets.transform = data_transforms['val']
+                    if all_image_datasets is not None:
+                        all_image_datasets.transform = data_transforms['val']
                 step = 0
                 for data, label in tqdm.tqdm(image_data[phase]):
                     loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
