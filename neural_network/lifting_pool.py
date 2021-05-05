@@ -70,8 +70,8 @@ class Lifting_down(nn.Module):
         return x
     
     def attention(self, x):
-        #x_att = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-        x_att = self.avg(x).squeeze(-1).squeeze(-1)
+        x_att = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
+        #x_att = self.avg(x).squeeze(-1).squeeze(-1)
         x_att = self.SE(x_att)
         x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
         return x
