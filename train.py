@@ -67,7 +67,7 @@ def load_data_cifar():
     dataset_sizes = []
     trainset = torchvision.datasets.CIFAR10(root='./data',
                                             train = True,
-                                            download = True,
+                                            download = False,
                                             transform = data_transforms['train'])
     trainloader = torch.utils.data.DataLoader(trainset,
                                               batch_size = BATCH_SIZE,
@@ -76,8 +76,8 @@ def load_data_cifar():
     
     testset = torchvision.datasets.CIFAR10(root='./data',
                                            train = False,
-                                           download = True,
-                                           transform = data_transforms['train'])
+                                           download = False,
+                                           transform = data_transforms['val'])
     testloader = torch.utils.data.DataLoader(testset,
                                              batch_size = BATCH_SIZE,
                                              shuffle = False,
@@ -143,9 +143,9 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'lifting_model'
-    model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
-    #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_model'
+    #model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
@@ -238,8 +238,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
-    for j in range(len(model.lifting_pool)):
-        loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
+# =============================================================================
+#     for j in range(len(model.lifting_pool)):
+#         loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
+# =============================================================================
     
     if phase == 'train':
         loss.backward()
