@@ -20,11 +20,12 @@ class Lifting_down(nn.Module):
         if self.stride is None:
             self.stride = kernel_size
         
-        self.instance_norm = torch.nn.InstanceNorm2d(channel)
-        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
-        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
-        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
-        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
+        self.instance_norm1 = torch.nn.InstanceNorm2d(channel)
+        self.instance_norm2 = torch.nn.InstanceNorm2d(channel * 2)
+        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 2, 1, 1, self.kernel_size))
+        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 2, 1, 1, self.kernel_size))
+        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 2, 1, self.kernel_size, 1))
+        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 2, 1, self.kernel_size, 1))
         #self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
@@ -58,12 +59,12 @@ class Lifting_down(nn.Module):
         self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
     
-    def energy_filter(self, x):
-        x_norm = self.instance_norm(x)
+    def energy_filter(self, x, instance_norm):
+        x_norm = instance_norm(x)
         batch, channel, height, width = x.shape
         x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         x_energe_index = torch.argsort(-x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // 4]#:x_energe_index.shape[1] // 2]
+        x_energe_index = x_energe_index[:, :channel // 2]#:x_energe_index.shape[1] // 2]
         x_energe_index, _ = torch.sort(x_energe_index)
         x = x.reshape(-1, height, width)
         x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
@@ -79,7 +80,7 @@ class Lifting_down(nn.Module):
         return x
     
     def forward(self, x):
-        x = self.energy_filter(x)
+        x = self.energy_filter(x, self.instance_norm1)
         # pad the feature map
         batch, channel, height, width = x.shape
         if self.pad_mode == 'discard':
@@ -89,6 +90,11 @@ class Lifting_down(nn.Module):
         else:
             x = torch.nn.functional.pad(x, pad = self.pad_place, mode = self.pad_mode)
             
+        assert self.low_pass_filter_h.shape[0] == x.shape[1], "low pass filter_h wrong channel number."
+        assert self.high_pass_filter_h.shape[0] == x.shape[1], "high pass filter_h wrong channel number."
+        assert self.low_pass_filter_v.shape[0] == x.shape[1], "low pass filter_v wrong channel number."
+        assert self.high_pass_filter_v.shape[0] == x.shape[1], "high pass filter_v wrong channel number."
+        
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, self.low_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
         x_h = torch.nn.functional.conv2d(x, self.high_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
@@ -100,6 +106,7 @@ class Lifting_down(nn.Module):
         del x_h
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+        x_all = self.energy_filter(x_all, self.instance_norm2)
         #x_all = self.squeeze(x_all)
         x_all = self.attention(x_all)
         return x_all
@@ -155,9 +162,11 @@ if __name__ == "__main__":
 # =============================================================================
     
     # test 2
-    image = torch.randn([2, 12, 4, 4]).cuda()
-    pool = Lifting_down(12, kernel_size = 2).cuda()
+    image = torch.randn([2, 256, 4, 4]).cuda()
+    pool = Lifting_down(256, kernel_size = 2).cuda()
+    print(image.shape)
     output = pool(image)
+    print(output.shape)
     print(pool.regular_term_loss() * 1e-4)
     pool.filter_constraint()
 # =============================================================================
