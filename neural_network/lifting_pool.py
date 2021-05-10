@@ -20,6 +20,7 @@ class Lifting_down(nn.Module):
         if self.stride is None:
             self.stride = kernel_size
         
+        self.instance_norm = torch.nn.InstanceNorm2d(channel)
         self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
@@ -58,8 +59,9 @@ class Lifting_down(nn.Module):
         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
     
     def energy_filter(self, x):
+        x_norm = self.instance_norm(x)
         batch, channel, height, width = x.shape
-        x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
+        x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         x_energe_index = torch.argsort(-x_energe, dim = 1)
         x_energe_index = x_energe_index[:, :channel // 4]#:x_energe_index.shape[1] // 2]
         x_energe_index, _ = torch.sort(x_energe_index)

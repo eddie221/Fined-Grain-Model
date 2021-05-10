@@ -7,7 +7,6 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.dev_model as model_net
-import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
 import torch
