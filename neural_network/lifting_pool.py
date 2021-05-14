@@ -21,11 +21,10 @@ class Lifting_down(nn.Module):
             self.stride = kernel_size
         
         self.instance_norm1 = torch.nn.InstanceNorm2d(channel)
-        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
-        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
-        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
-        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
-        self.squeeze = nn.Conv2d(channel, channel // 4, 1, bias = False)
+        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
+        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
+        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
+        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.avg = nn.AdaptiveAvgPool2d(1)
         #self.filter_constraint()
     
@@ -77,7 +76,6 @@ class Lifting_down(nn.Module):
     
     def forward(self, x):
         # pad the feature map
-        x = self.squeeze(x)
         batch, channel, height, width = x.shape
         if self.pad_mode == 'discard':
             x = x[:, :, :height - height % self.kernel_size, :width - width % self.kernel_size]
@@ -161,7 +159,6 @@ if __name__ == "__main__":
     output = pool(image)
     print(output.shape)
     print(pool.regular_term_loss() * 1e-4)
-    pool.filter_constraint()
 # =============================================================================
 #     ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')
 #     lifting_up(ll, hl, lh, hh)
