@@ -20,18 +20,13 @@ class Lifting_down(nn.Module):
         if self.stride is None:
             self.stride = kernel_size
         
-        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
-        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
-        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
-        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
-        self.squeeze = nn.Conv2d(channel * 4, channel, 1, bias = False)
+        self.instance_norm1 = torch.nn.InstanceNorm2d(channel)
+        self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
+        self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel // 4, 1, 1, self.kernel_size))
+        self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
+        self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel // 4, 1, self.kernel_size, 1))
+        self.squeeze = nn.Conv2d(channel, channel // 4, 1, bias = False)
         self.avg = nn.AdaptiveAvgPool2d(1)
-# =============================================================================
-#         self.SE = nn.Sequential(nn.Linear(channel, channel // 2),
-#                                 nn.ReLU(),
-#                                 nn.Linear(channel // 2, channel),
-#                                 nn.Sigmoid())
-# =============================================================================
         #self.filter_constraint()
     
     def __repr__(self):
@@ -43,43 +38,46 @@ class Lifting_down(nn.Module):
         constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
                                 torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
-# =============================================================================
-#         constraint2 = torch.sum(torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2) +\
-#             torch.sum(torch.pow(1 - self.high_pass_filter_h, 2), dim = 3) +\
-#             torch.sum(torch.pow(1 - self.high_pass_filter_v, 2), dim = 2), dim = 0).squeeze(-1)
-# =============================================================================
         constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
                        torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2), dim = 0).squeeze(-1)
         return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
-    def filter_constraint(self):
-        self.low_pass_filter_h.data = self.low_pass_filter_h / torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True)
-        self.high_pass_filter_h.data = self.high_pass_filter_h - torch.mean(self.high_pass_filter_h, dim = 3, keepdim = True)
-        self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
-        self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
+# =============================================================================
+#     def filter_constraint(self):
+#         self.low_pass_filter_h.data = self.low_pass_filter_h / torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True)
+#         self.high_pass_filter_h.data = self.high_pass_filter_h - torch.mean(self.high_pass_filter_h, dim = 3, keepdim = True)
+#         self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
+#         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
+# =============================================================================
     
-    def energy_filter(self, x):
-        batch, channel, height, width = x.shape
-        x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-        x_energe_index = torch.argsort(-x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // 4 * 3]#:x_energe_index.shape[1] // 2]
-        x_energe_index, _ = torch.sort(x_energe_index)
-        x = x.reshape(-1, height, width)
-        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
-        x = x[x_energe_index.reshape(-1)]
-        x = x.reshape(batch, -1, height, width)
-        return x
+# =============================================================================
+#     def energy_filter(self, x):
+#         x_norm = self.instance_norm1(x)
+#         batch, channel, height, width = x.shape
+#         x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
+#         x_energe_index = torch.argsort(-x_energe, dim = 1)
+#         x_energe_index = x_energe_index[:, :channel // 4]#:x_energe_index.shape[1] // 2]
+#         x_energe_index, _ = torch.sort(x_energe_index)
+#         x = x.reshape(-1, height, width)
+#         x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
+#         x = x[x_energe_index.reshape(-1)]
+#         x = x.reshape(batch, -1, height, width)
+#         return x
+# =============================================================================
     
-    def attention(self, x):
-        x_att = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-        #x_att = self.avg(x).squeeze(-1).squeeze(-1)
-        x_att = self.SE(x_att)
-        x = x * x_att.unsqueeze(-1).unsqueeze(-1)
-        return x
+# =============================================================================
+#     def attention(self, x):
+#         x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
+#         #x_att = self.avg(x).squeeze(-1).squeeze(-1)
+#         x_att = self.SE(x_energe)
+#         x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
+#         return x
+# =============================================================================
     
     def forward(self, x):
         # pad the feature map
+        x = self.squeeze(x)
         batch, channel, height, width = x.shape
         if self.pad_mode == 'discard':
             x = x[:, :, :height - height % self.kernel_size, :width - width % self.kernel_size]
@@ -92,7 +90,7 @@ class Lifting_down(nn.Module):
         assert self.high_pass_filter_h.shape[0] == x.shape[1], "high pass filter_h wrong channel number."
         assert self.low_pass_filter_v.shape[0] == x.shape[1], "low pass filter_v wrong channel number."
         assert self.high_pass_filter_v.shape[0] == x.shape[1], "high pass filter_v wrong channel number."
-            
+        
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, self.low_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
         x_h = torch.nn.functional.conv2d(x, self.high_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
@@ -104,8 +102,6 @@ class Lifting_down(nn.Module):
         del x_h
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
-        x_all = self.squeeze(x_all)
-        
         return x_all
 
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
@@ -160,8 +156,10 @@ if __name__ == "__main__":
     
     # test 2
     image = torch.randn([2, 256, 4, 4]).cuda()
+    print(image.shape)
     pool = Lifting_down(256, kernel_size = 2).cuda()
     output = pool(image)
+    print(output.shape)
     print(pool.regular_term_loss() * 1e-4)
     pool.filter_constraint()
 # =============================================================================

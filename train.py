@@ -30,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -347,7 +347,7 @@ def training(job):
         print("Fold {} best acc : {:.6f} loss : {:.6f}".format(idx, ACCMeters[idx - 1].avg, LOSSMeters[idx - 1].avg))
         acc += ACCMeters[idx - 1].avg
         loss += LOSSMeters[idx - 1].avg
-    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc / 5, loss / 5))
+    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc / KFOLD, loss / KFOLD))
     
 class AverageMeter():
     """Computes and stores the average and current value"""
