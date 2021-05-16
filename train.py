@@ -30,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -39,6 +39,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
+data_name = 'Cifar10'
 data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
@@ -320,7 +321,7 @@ def training(job):
                 logging.info("{} set loss : {:.6f}".format(phase, loss_t.avg))        
                 logging.info("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))        
                 print('Index : {}'.format(INDEX))
-                print("dataset : {}".format(data_dir))
+                print("dataset : {}".format(data_name))
                 print("Model name : {}".format(model_name))
                 print("{} set loss : {:.6f}".format(phase, loss_t.avg))
                 print("{} set cls_loss_1 : {:.6f}".format(phase, cls_rate_1.avg))
