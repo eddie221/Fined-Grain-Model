@@ -20,7 +20,6 @@ class Lifting_down(nn.Module):
         if self.stride is None:
             self.stride = kernel_size
         
-        self.instance_norm1 = torch.nn.InstanceNorm2d(channel)
         self.low_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
@@ -62,15 +61,6 @@ class Lifting_down(nn.Module):
 #         x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
 #         x = x[x_energe_index.reshape(-1)]
 #         x = x.reshape(batch, -1, height, width)
-#         return x
-# =============================================================================
-    
-# =============================================================================
-#     def attention(self, x):
-#         x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-#         #x_att = self.avg(x).squeeze(-1).squeeze(-1)
-#         x_att = self.SE(x_energe)
-#         x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
 #         return x
 # =============================================================================
     

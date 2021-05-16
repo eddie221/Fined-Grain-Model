@@ -31,13 +31,32 @@ class Bottleneck(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
-        self.conv2 = conv3x3(width, width, stride, groups, dilation)
+        self.stride = stride
+        if stride == 1:
+            self.conv2 = conv3x3(width, width, stride, groups, dilation)
+        else:
+            self.instance_norm = nn.InstanceNorm2d(width)
+            self.conv2 = nn.Sequential(Lifting_down(width // 4),
+                                       conv3x3(width, width, 1, groups, dilation))
         self.bn2 = norm_layer(width)
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
+    
+    def energy_filter(self, x):
+        x_norm = self.instance_norm(x)
+        batch, channel, height, width = x.shape
+        x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
+        x_energe_index = torch.argsort(-x_energe, dim = 1)
+        x_energe_index = x_energe_index[:, :channel // 4]#:x_energe_index.shape[1] // 2]
+        x_energe_index, _ = torch.sort(x_energe_index)
+        x = x.reshape(-1, height, width)
+        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
+        x = x[x_energe_index.reshape(-1)]
+        x = x.reshape(batch, -1, height, width)
+        return x
 
     def forward(self, x):
         identity = x
@@ -46,6 +65,9 @@ class Bottleneck(nn.Module):
         out = self.bn1(out)
         out = self.relu(out)
         
+        if self.stride != 1:
+            out = self.energy_filter(out)
+            
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
