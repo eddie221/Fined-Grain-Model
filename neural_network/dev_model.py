@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -60,35 +61,18 @@ class Bottleneck(nn.Module):
 
         return out
     
-class energy_filter(nn.Module):
-    def __init__(self, channel, part = 4):
-        super(energy_filter, self).__init__()
-        self.instance_norm = nn.InstanceNorm2d(channel)
-        self.part = part
-        
-    def forward(self, x):
-        x_norm = self.instance_norm(x)
-        batch, channel, height, width = x.shape
-        x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
-        x_energe_index = torch.argsort(-x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // self.part]
-        x_energe_index, _ = torch.sort(x_energe_index)
-        x = x.reshape(-1, height, width)
-        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
-        x = x[x_energe_index.reshape(-1)]
-        x = x.reshape(batch, -1, height, width)
-        return x
-    
 class dev_model(nn.Module):
     def __init__(self, num_classes):
         super(dev_model, self).__init__()
         self.name = "lifting_model"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = Lifting_down(64, 2, 2, pad_mode = "pad0", energy_filter = energy_filter)
+        self.lifting1 = nn.Sequential(Lifting_down(64, 3, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = Lifting_down(64, 2, 2, pad_mode = "pad0", energy_filter = energy_filter)
+        self.lifting2 = nn.Sequential(Lifting_down(64, 3, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
@@ -115,8 +99,8 @@ class dev_model(nn.Module):
                 )
             else:
                 downsample = nn.Sequential(
-                    nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion, 2, stride = 2, pad_mode = "pad0", energy_filter = energy_filter),
+                    nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=1, bias=False),
+                    Lifting_down(planes, 3, stride = 2, pad_mode = "pad0"),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -215,3 +199,4 @@ if __name__ == "__main__":
         print(loss)
         optim.step()
         
+    #model.lifting_pool[0].filter_constraint()
