@@ -10,13 +10,14 @@ import torch
 import math
 
 class GNN(nn.Module):
-    def __init__(self, feature, threshold = 0.005, bias = True, power = 1, channel_feature = False):
+    def __init__(self, feature, threshold = 0.005, bias = True, power = 1):
         super(GNN, self).__init__()
-        self.channel_feature = channel_feature
         self.A = None
         self.D = None
         self.power = power
         self.laplacian = None
+        self.laplacian_sym = None
+        self.laplacian_rw = None
         self.relu = nn.ReLU()
         self.threshold = threshold
         self.layer = len(feature) - 1
@@ -36,8 +37,6 @@ class GNN(nn.Module):
         if len(x.shape) == 4:
             batch, channel, height, width = x.shape
             x = x.view(batch, channel, -1)
-            if self.channel_feature:
-                x = x.permute(0, 2, 1)
 
         x_t = x.permute(0, 2, 1)
         x_2 = torch.pow(x, 2)
@@ -49,39 +48,47 @@ class GNN(nn.Module):
         return norm_x
     
     def init_Adjency_Degree_matrix(self, x):
-            
         with torch.no_grad():
             cha_cor = self.correlation(x)
             self.A = cha_cor - self.threshold
             self.A = self.relu(self.A)
+            self.A[self.A != 0] = 1
+            self.A = self.A - torch.eye(self.A.shape[1]).cuda()
             self.D = torch.diag_embed(torch.sum(self.A, dim = 2))
-            D_inv_sqrt = torch.inverse(torch.sqrt(self.D))
-            self.laplacian = torch.torch.bmm(torch.bmm(D_inv_sqrt, self.A), D_inv_sqrt)
+            self.laplacian = self.D - self.A
+            D_sqrt_inv = torch.inverse(torch.sqrt(self.D))
+            self.laplacian_sym = torch.bmm(torch.bmm(D_sqrt_inv, self.A), D_sqrt_inv)
             
     def __init_matrix__(self, x, _dir = None):
         batch, channel = x.shape[0:2]
-        if self.channel_feature:
-            x_linear = x.view(batch, channel, -1).permute(0, 2, 1)
-        else:
-            x_linear = x.view(batch, channel, -1)
+        x_linear = x.view(batch, channel, -1)
+            
         self.init_Adjency_Degree_matrix(x_linear)
         return x_linear
             
     def forward(self, x):    
         x_linear = self.__init_matrix__(x)
+        x_result = []
         for i in range(self.layer):
             lx = torch.bmm(self.laplacian, x_linear)
             x_linear = self.W[i](lx)
+            x_result.append(x_linear)
             x_linear = torch.nn.functional.instance_norm(x_linear)
             x_linear = self.relu(x_linear)
             
-        return x_linear
+        return x_result
     
 if __name__ == '__main__':
     torch.manual_seed(0)
     a = torch.randn([1, 5, 25]).cuda()
     #a = torch.arange(25, dtype = torch.float).reshape([1, 1, 5, 5])
     #a = torch.cat([a, a, a], dim = 1)
+<<<<<<< Updated upstream
     gnn = GNN([25, 30, 35], power = 1, channel_feature = False).cuda()
+=======
+    gnn = GNN([25, 10, 5], power = 1).cuda()
+>>>>>>> Stashed changes
     
     a = gnn(a)
+    print(len(a))
+    print(a)

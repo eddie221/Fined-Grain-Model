@@ -91,11 +91,11 @@ class dev_model(nn.Module):
         self.name = "lifting_model"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+        self.lifting1 = nn.Sequential(Lifting_down(64, 5, 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
                                       nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+        self.lifting2 = nn.Sequential(Lifting_down(64, 5, 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
                                       nn.Conv2d(256, 64, 1, bias = False))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
@@ -124,7 +124,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes, 2, stride = 2, pad_mode = "pad0"),
+                    Lifting_down(planes, 5, stride = 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -218,7 +218,6 @@ if __name__ == "__main__":
         optim.zero_grad()
         loss = loss_f(output, label)
         for j in range(len(model.lifting_pool)):
-            print(model.lifting_pool[j].regular_term_loss())
             loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
         loss.backward()
         print(loss)
