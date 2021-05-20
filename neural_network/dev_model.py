@@ -91,12 +91,12 @@ class dev_model(nn.Module):
         self.name = "lifting_model"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = nn.Sequential(Lifting_down(64, 3, 2, pad_mode = "pad0"),
-                                      energy_filter(256))
+        self.lifting1 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = nn.Sequential(Lifting_down(64, 3, 2, pad_mode = "pad0"),
-                                      energy_filter(256))
+        self.lifting2 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, 3)
@@ -124,7 +124,7 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes, 3, stride = 2, pad_mode = "pad0"),
+                    Lifting_down(planes, 2, stride = 2, pad_mode = "pad0"),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -195,7 +195,7 @@ def dev_mod(num_classes = 1000):
     
 if __name__ == "__main__":
     model = dev_model(9).to("cuda:0")
-    a = torch.randn([8, 3, 224, 224]).to("cuda:0")
+    a = torch.randn([2, 3, 224, 224]).to("cuda:0")
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     print(len(model.lifting_pool))
     with open('../lifting.txt', 'w') as f:
@@ -212,12 +212,13 @@ if __name__ == "__main__":
 # =============================================================================
     
     loss_f = torch.nn.CrossEntropyLoss()
-    label = torch.tensor([0, 1, 3, 2, 1, 0, 3, 2]).cuda()
-    for i in range(1):
+    label = torch.tensor([0, 1]).cuda()
+    for i in range(5):
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
         for j in range(len(model.lifting_pool)):
+            print(model.lifting_pool[j].regular_term_loss())
             loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
         loss.backward()
         print(loss)
