@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.dev_model as model_net
+import neural_network.vgg_liftpool as vgg_liftpool
 import torchvision.transforms as transforms
 import torchvision
 import torch
@@ -143,14 +143,14 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'lifting_model'
-    model = model_net.dev_model(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'vgg_liftpool'
+    model = vgg_liftpool.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    if model_name == 'lifting_model':
-        print("lifting : {}".format(len(model.lifting_pool)))
+    if model_name == 'vgg_liftpool':
+        print("lift pooling : {}".format(len(model.lifting_pool)))
     return model
 
 def create_opt_loss(model):
@@ -395,3 +395,4 @@ if __name__ == '__main__':
     logging.info('Index : {}'.format(INDEX))
     logging.info("dataset : {}".format(data_dir))
     training = training(['train', 'val'])
+    #model = create_nn_model()

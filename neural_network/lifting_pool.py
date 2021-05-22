@@ -41,13 +41,11 @@ class Lifting_down(nn.Module):
                        torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2), dim = 0).squeeze(-1)
             
         # constraint3 => H'H + L'L = 1
-# =============================================================================
-#         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
-#         horizontal_sum = torch.sum(torch.pow(self.low_pass_filter_h, 2).squeeze(2), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_h, 2).squeeze(2), dim = 2)
-#         constraint3 = torch.sum(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
-# =============================================================================
+        vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
+        horizontal_sum = torch.sum(torch.pow(self.low_pass_filter_h, 2).squeeze(2), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_h, 2).squeeze(2), dim = 2)
+        constraint3 = torch.sum(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
         
-        return (constraint1 + constraint2).squeeze(-1).squeeze(-1)
+        return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
     
     # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
 # =============================================================================
