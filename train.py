@@ -30,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -126,7 +126,7 @@ def load_data():
         
     return dataloader, dataset_sizes, all_image_datasets
 # =============================================================================
-#     dataset_sizes = len(all_image_datasets)
+#     dataset_sizes = len(all_image_datasets)ting(256, kernel_size=
 #     print(dataset_sizes)
 #     
 #     count = torch.zeros([NUM_CLASS])
