@@ -30,7 +30,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -39,7 +39,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'Cifar10'
+data_name = 'Cifar100'
 data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
@@ -65,18 +65,18 @@ data_transforms = {
 def load_data_cifar():
     dataloader = []
     dataset_sizes = []
-    trainset = torchvision.datasets.CIFAR10(root='./data',
+    trainset = torchvision.datasets.CIFAR100(root='./data',
                                             train = True,
-                                            download = False,
+                                            download = True,
                                             transform = data_transforms['train'])
     trainloader = torch.utils.data.DataLoader(trainset,
                                               batch_size = BATCH_SIZE,
                                               shuffle = True,
                                               num_workers = 2)
     
-    testset = torchvision.datasets.CIFAR10(root='./data',
+    testset = torchvision.datasets.CIFAR100(root='./data',
                                            train = False,
-                                           download = False,
+                                           download = True,
                                            transform = data_transforms['val'])
     testloader = torch.utils.data.DataLoader(testset,
                                              batch_size = BATCH_SIZE,
@@ -149,7 +149,7 @@ def create_nn_model():
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    if model_name == 'vgg_liftpool':
+    if 'liftpool' in model_name:
         print("lift pooling : {}".format(len(model.lifting_pool)))
     return model
 
@@ -395,4 +395,3 @@ if __name__ == '__main__':
     logging.info('Index : {}'.format(INDEX))
     logging.info("dataset : {}".format(data_dir))
     training = training(['train', 'val'])
-    #model = create_nn_model()
