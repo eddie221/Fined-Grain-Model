@@ -78,9 +78,11 @@ def make_layers(cfg, batch_norm=False):
     in_channels = 3
     for v in cfg:
         if v == 'M':
-            layers += [Lifting_down(in_channels, 2, 2),
-                       nn.Conv2d(in_channels * 4, in_channels, 1, bias = False)]
-            #layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+# =============================================================================
+#             layers += [Lifting_down(in_channels, 2, 2),
+#                        nn.Conv2d(in_channels * 4, in_channels, 1, bias = False)]
+# =============================================================================
+            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             if batch_norm:

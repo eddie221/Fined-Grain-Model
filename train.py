@@ -144,7 +144,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'vgg_liftpool'
-    model = vgg_liftpool.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
+    model = vgg_liftpool.vgg16_bn(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
