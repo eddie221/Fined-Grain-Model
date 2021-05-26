@@ -88,13 +88,11 @@ class Resnet(nn.Module):
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.lifting1 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
-                                      nn.Conv2d(256, 64, 1, bias = False),
-                                      Energy_attention(64))
+                                      nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.lifting2 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
-                                      nn.Conv2d(256, 64, 1, bias = False),
-                                      Energy_attention(64))
+                                      nn.Conv2d(256, 64, 1, bias = False))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(Bottleneck, 64, layers[0])
@@ -123,7 +121,6 @@ class Resnet(nn.Module):
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=1, bias=False),
                     Lifting_down(planes, 2, stride = 2, pad_mode = "pad0"),
-                    Energy_attention(planes * 4),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
