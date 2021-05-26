@@ -17,6 +17,7 @@ class Lifting_down(nn.Module):
         self.kernel_size = kernel_size
         self.channel = channel
         self.stride = stride
+        
         if self.stride is None:
             self.stride = kernel_size
         
@@ -71,15 +72,6 @@ class Lifting_down(nn.Module):
 #         return x
 # =============================================================================
     
-# =============================================================================
-#     def attention(self, x):
-#         x_energe = torch.mean(torch.mean(torch.pow(x, 2), dim = -1), dim = -1)
-#         #x_att = self.avg(x).squeeze(-1).squeeze(-1)
-#         x_att = self.SE(x_energe)
-#         x = x * x_att.unsqueeze(-1).unsqueeze(-1) + x
-#         return x
-# =============================================================================
-    
     def forward(self, x):
         # pad the feature map
         batch, channel, height, width = x.shape
@@ -106,6 +98,7 @@ class Lifting_down(nn.Module):
         del x_h
         
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+        
         return x_all
 
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):

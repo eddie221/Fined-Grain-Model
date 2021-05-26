@@ -27,6 +27,21 @@ model_urls = {
     'vgg19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
 }
 
+class Energy_attention(nn.Module):
+    def __init__(self, in_cha):
+        super(Energy_attention, self).__init__()
+        self.instance_norm = nn.InstanceNorm2d(in_cha)
+        self.relu = nn.ReLU()
+        
+    def forward(self, x):
+        x_norm = self.instance_norm(x)
+        x_norm = self.relu(x_norm)
+        x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
+        
+        x_energy = torch.nn.functional.sigmoid(x_energy)
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
+        
+        return x
 
 class VGG(nn.Module):
 
@@ -44,9 +59,10 @@ class VGG(nn.Module):
             nn.Dropout(),
             nn.Linear(4096, num_classes),
         )
+        
         if init_weights:
             self._initialize_weights()
-            
+        
         self.lifting_pool = []
         for m in self.modules():
             if isinstance(m, Lifting_down):
@@ -71,15 +87,15 @@ class VGG(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
-
-
+                
 def make_layers(cfg, batch_norm=False):
     layers = []
     in_channels = 3
     for v in cfg:
         if v == 'M':
             layers += [Lifting_down(in_channels, 2, 2),
-                       nn.Conv2d(in_channels * 4, in_channels, 1, bias = False)]
+                       nn.Conv2d(in_channels * 4, in_channels, 1, bias = False),
+                       Energy_attention(in_channels)]
             #layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
@@ -195,6 +211,8 @@ def vgg19_bn(pretrained=False, progress=True, **kwargs):
 
 if __name__ == '__main__':
     model = vgg13_bn(num_classes = 10)
+    with open("vgg13_bn.txt", 'w') as f:
+        print(model, file = f)
     a = torch.randn([2, 3, 224, 224])
     output = model(a)
-    print(output.shape)
+    #print(output.shape)
