@@ -61,48 +61,42 @@ class Bottleneck(nn.Module):
 
         return out
     
-class energy_filter(nn.Module):
-    def __init__(self, channel, part = 4):
-        super(energy_filter, self).__init__()
-        self.instance_norm = nn.InstanceNorm2d(channel)
-        self.part = part
-        self.channel = channel
-        
-    def __repr__(self):
-        s = "Energy_Filter(channel={}, part={}),\n  Instance_norm={}".format(self.channel, self.part, self.instance_norm)
-        return s
+class Energy_attention(nn.Module):
+    def __init__(self, in_cha):
+        super(Energy_attention, self).__init__()
+        self.instance_norm = nn.InstanceNorm2d(in_cha)
+        self.relu = nn.ReLU()
         
     def forward(self, x):
         x_norm = self.instance_norm(x)
-        batch, channel, height, width = x.shape
-        x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
-        x_energe_index = torch.argsort(-x_energe, dim = 1)
-        x_energe_index = x_energe_index[:, :channel // self.part]#:x_energe_index.shape[1] // 2]
-        x_energe_index, _ = torch.sort(x_energe_index)
-        x = x.reshape(-1, height, width)
-        x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
-        x = x[x_energe_index.reshape(-1)]
-        x = x.reshape(batch, -1, height, width)
+        x_norm = self.relu(x_norm)
+        x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
+        
+        x_energy = torch.nn.functional.sigmoid(x_energy)
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
+        
         return x
     
-class dev_model(nn.Module):
-    def __init__(self, num_classes):
-        super(dev_model, self).__init__()
-        self.name = "lifting_model"
+class Resnet(nn.Module):
+    def __init__(self, num_classes, layers):
+        super(Resnet, self).__init__()
+        self.name = "resnet_liftpool"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = nn.Sequential(Lifting_down(64, 5, 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
-                                      nn.Conv2d(256, 64, 1, bias = False))
+        self.lifting1 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False),
+                                      Energy_attention(64))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = nn.Sequential(Lifting_down(64, 5, 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
-                                      nn.Conv2d(256, 64, 1, bias = False))
+        self.lifting2 = nn.Sequential(Lifting_down(64, 2, 2, pad_mode = "pad0"),
+                                      nn.Conv2d(256, 64, 1, bias = False),
+                                      Energy_attention(64))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        self.layer1 = self._make_layer(Bottleneck, 64, 3)
-        self.layer2 = self._make_layer(Bottleneck, 128, 4, stride = 2)
-        self.layer3 = self._make_layer(Bottleneck, 256, 6, stride = 2)
-        self.layer4 = self._make_layer(Bottleneck, 512, 3, stride = 2)
+        self.layer1 = self._make_layer(Bottleneck, 64, layers[0])
+        self.layer2 = self._make_layer(Bottleneck, 128, layers[1], stride = 2)
+        self.layer3 = self._make_layer(Bottleneck, 256, layers[2], stride = 2)
+        self.layer4 = self._make_layer(Bottleneck, 512, layers[3], stride = 2)
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 2048)
@@ -124,7 +118,8 @@ class dev_model(nn.Module):
             else:
                 downsample = nn.Sequential(
                     nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes, 5, stride = 2, pad_mode = "pad0", pad_place = [2, 2, 2, 2]),
+                    Lifting_down(planes, 2, stride = 2, pad_mode = "pad0"),
+                    Energy_attention(planes * 4),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
         layers = []
@@ -189,12 +184,17 @@ class dev_model(nn.Module):
         return x
     
     
-def dev_mod(num_classes = 1000):
-    model = dev_model(num_classes)
+def resnet50(num_classes = 1000):
+    model = Resnet(num_classes, [3, 4, 6, 3])
+    return model
+
+
+def resnet101(num_classes = 1000):
+    model = Resnet(num_classes, [3, 4, 23, 3])
     return model
     
 if __name__ == "__main__":
-    model = dev_model(9).to("cuda:0")
+    model = resnet50(9).to("cuda:0")
     a = torch.randn([2, 3, 224, 224]).to("cuda:0")
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     print(len(model.lifting_pool))

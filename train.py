@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-#import neural_network.vgg_liftpool as vgg_liftpool
+import neural_network.resnet_liftpool as resnet_liftpool
 import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
@@ -31,7 +31,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -144,8 +144,8 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_model'
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_liftpool'
+    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
@@ -240,10 +240,8 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
-# =============================================================================
-#     for j in range(len(model.lifting_pool)):
-#         loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
-# =============================================================================
+    for j in range(len(model.lifting_pool)):
+        loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
     
     if phase == 'train':
         loss.backward()
