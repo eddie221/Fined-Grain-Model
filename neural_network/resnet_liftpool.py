@@ -66,13 +66,17 @@ class Energy_attention(nn.Module):
         super(Energy_attention, self).__init__()
         self.instance_norm = nn.InstanceNorm2d(in_cha)
         self.relu = nn.ReLU()
+        self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 4),
+                                nn.ReLU(),
+                                nn.Linear(in_cha // 4, in_cha),
+                                nn.Sigmoid())
         
     def forward(self, x):
         x_norm = self.instance_norm(x)
         x_norm = self.relu(x_norm)
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
-        x_energy = torch.nn.functional.sigmoid(x_energy)
+        x_energy = self.SE(x_energy)
         x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
         
         return x
