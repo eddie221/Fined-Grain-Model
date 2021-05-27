@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.resnet_liftpool as resnet_liftpool
+import neural_network.vgg_liftpool as vgg_liftpool
 import neural_network.resnet as resnet
 import torchvision.transforms as transforms
 import torchvision
@@ -31,7 +31,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -40,7 +40,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'Cifar100'
+data_name = 'Cifar10'
 data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
@@ -66,7 +66,7 @@ data_transforms = {
 def load_data_cifar():
     dataloader = []
     dataset_sizes = []
-    trainset = torchvision.datasets.CIFAR100(root='./data',
+    trainset = torchvision.datasets.CIFAR10(root='./data',
                                             train = True,
                                             download = True,
                                             transform = data_transforms['train'])
@@ -75,7 +75,7 @@ def load_data_cifar():
                                               shuffle = True,
                                               num_workers = 2)
     
-    testset = torchvision.datasets.CIFAR100(root='./data',
+    testset = torchvision.datasets.CIFAR10(root='./data',
                                            train = False,
                                            download = True,
                                            transform = data_transforms['val'])
@@ -144,8 +144,8 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_liftpool'
-    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'vgg_liftpool'
+    model = vgg_liftpool.vgg16_bn(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
