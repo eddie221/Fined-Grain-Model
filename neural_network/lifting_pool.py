@@ -26,7 +26,6 @@ class Lifting_down(nn.Module):
         self.high_pass_filter_h = torch.nn.Parameter(torch.rand(channel, 1, 1, self.kernel_size))
         self.low_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
         self.high_pass_filter_v = torch.nn.Parameter(torch.rand(channel, 1, self.kernel_size, 1))
-        self.avg = nn.AdaptiveAvgPool2d(1)
         #self.filter_constraint()
     
     def __repr__(self):
@@ -39,7 +38,8 @@ class Lifting_down(nn.Module):
                                 torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
         constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
-                       torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2), dim = 0).squeeze(-1)
+                       torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2) +\
+                           torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2), dim = 0).squeeze(-1)
             
         # constraint3 => H'H + L'L = 1
         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
@@ -90,6 +90,7 @@ class Lifting_down(nn.Module):
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, self.low_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
         x_h = torch.nn.functional.conv2d(x, self.high_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
+        #x_first = torch.cat([x_l, x_h], dim = -1)
         x_ll = torch.nn.functional.conv2d(x_l, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         x_hl = torch.nn.functional.conv2d(x_l, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
@@ -97,8 +98,17 @@ class Lifting_down(nn.Module):
         del x_l
         del x_h
         
-        x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+        #x_l2 = torch.nn.functional.conv2d(x_first, self.low_pass_filter_v, groups = x_first.shape[1], stride = (self.stride, 1))
+        #x_h2 = torch.nn.functional.conv2d(x_first, self.high_pass_filter_v, groups = x_first.shape[1], stride = (self.stride, 1))
+        #x_second = torch.cat([x_l2, x_h2], dim = 2)
         
+        x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
+# =============================================================================
+#         x_all2 = torch.cat([x_second[:, :, :height // 2, :width // 2],
+#                            x_second[:, :, height // 2:, :width // 2],
+#                            x_second[:, :, :height // 2, width // 2:],
+#                            x_second[:, :, height // 2:, width // 2:]], dim = 1)
+# =============================================================================
         return x_all
 
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
@@ -153,7 +163,6 @@ if __name__ == "__main__":
     
     # test 2
     image = torch.randn([2, 32, 4, 4]).cuda()
-    print(image.shape)
     pool = Lifting_down(32, kernel_size = 2).cuda()
     output = pool(image)
     print(output.shape)

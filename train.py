@@ -31,7 +31,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -40,7 +40,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'Cifar10'
+data_name = 'Cifar100'
 data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
@@ -145,7 +145,7 @@ def load_data():
 def create_nn_model():
     global model_name
     model_name = 'vgg_liftpool'
-    model = vgg_liftpool.vgg16_bn(num_classes = NUM_CLASS).to(DEVICE)
+    model = vgg_liftpool.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
@@ -157,15 +157,15 @@ def create_nn_model():
 def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
-    optimizer = [#torch.optim.SGD(model.backbone.parameters(), lr = LR, momentum = 0.9, weight_decay = 1e-4),
-                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+    optimizer = [torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
+                 #torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
 # =============================================================================
 #                  torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
 #                                    {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[100, 200, 300], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[80, 120], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
