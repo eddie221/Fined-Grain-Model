@@ -18,3 +18,9 @@ dataset.py
 sample/
 
 data/
+
+resnet18_lifting.txt
+
+resnet18.txt
+
+resnet50_lifting.txt

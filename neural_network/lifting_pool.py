@@ -34,17 +34,17 @@ class Lifting_down(nn.Module):
     
     def regular_term_loss(self):
         # low pass filter sum = 1
-        constraint1 = torch.sum(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
+        constraint1 = torch.mean(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
                                 torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
-        constraint2 = torch.sum(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
+        constraint2 = torch.mean(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
                        torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2) +\
                            torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2), dim = 0).squeeze(-1)
             
         # constraint3 => H'H + L'L = 1
         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
         horizontal_sum = torch.sum(torch.pow(self.low_pass_filter_h, 2).squeeze(2), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_h, 2).squeeze(2), dim = 2)
-        constraint3 = torch.sum(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
+        constraint3 = torch.mean(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
         
         return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
     
@@ -57,21 +57,6 @@ class Lifting_down(nn.Module):
 #         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
 # =============================================================================
     
-# =============================================================================
-#     def energy_filter(self, x):
-#         x_norm = self.instance_norm1(x)
-#         batch, channel, height, width = x.shape
-#         x_energe = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
-#         x_energe_index = torch.argsort(-x_energe, dim = 1)
-#         x_energe_index = x_energe_index[:, :channel // 4]#:x_energe_index.shape[1] // 2]
-#         x_energe_index, _ = torch.sort(x_energe_index)
-#         x = x.reshape(-1, height, width)
-#         x_energe_index = x_energe_index + torch.arange(0, batch).reshape(-1, 1).to(x.get_device()) * channel
-#         x = x[x_energe_index.reshape(-1)]
-#         x = x.reshape(batch, -1, height, width)
-#         return x
-# =============================================================================
-    
     def forward(self, x):
         # pad the feature map
         batch, channel, height, width = x.shape
@@ -82,7 +67,7 @@ class Lifting_down(nn.Module):
         else:
             x = torch.nn.functional.pad(x, pad = self.pad_place, mode = self.pad_mode)
             
-        assert self.low_pass_filter_h.shape[0] == x.shape[1], "low pass filter_h wrong channel number."
+        assert self.low_pass_filter_h.shape[0] == x.shape[1], "low pass filter_h wrong channel number. low pass filter_h get {}. x get {}".format(self.low_pass_filter_h.shape[0], x.shape[1])
         assert self.high_pass_filter_h.shape[0] == x.shape[1], "high pass filter_h wrong channel number."
         assert self.low_pass_filter_v.shape[0] == x.shape[1], "low pass filter_v wrong channel number."
         assert self.high_pass_filter_v.shape[0] == x.shape[1], "high pass filter_v wrong channel number."
@@ -93,8 +78,8 @@ class Lifting_down(nn.Module):
         #x_first = torch.cat([x_l, x_h], dim = -1)
         x_ll = torch.nn.functional.conv2d(x_l, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         x_hl = torch.nn.functional.conv2d(x_l, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
-        x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
-        x_hh = torch.nn.functional.conv2d(x_h, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
+        x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter_v, groups = x_h.shape[1], stride = (self.stride, 1))
+        x_hh = torch.nn.functional.conv2d(x_h, self.high_pass_filter_v, groups = x_h.shape[1], stride = (self.stride, 1))
         del x_l
         del x_h
         
@@ -166,7 +151,7 @@ if __name__ == "__main__":
     pool = Lifting_down(32, kernel_size = 2).cuda()
     output = pool(image)
     print(output.shape)
-    print(pool.regular_term_loss() * 1e-4)
+    print(pool.regular_term_loss())
 # =============================================================================
 #     ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')
 #     lifting_up(ll, hl, lh, hh)

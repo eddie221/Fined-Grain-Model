@@ -7,23 +7,19 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.vgg_liftpool as vgg_liftpool
-import neural_network.resnet as resnet
-import torchvision.transforms as transforms
-import torchvision
+import neural_network.resnet_liftpool as resnet_liftpool
 import torch
+import neural_network.resnet as resnet
 #import args
 import random
-from PIL import Image
+
 import numpy as np
 import time
 from config import *
-if KFOLD == 1:
-    from config import VAL_SPLIT
-from torch.utils.data.sampler import SubsetRandomSampler
-from sklearn.model_selection import KFold
 import tqdm
 import os
 import logging
+from load_dataset import load_ImageNet
 
 if not os.path.exists('./pkl/{}/'.format(INDEX)):
     os.mkdir('./pkl/{}/'.format(INDEX))
@@ -40,92 +36,13 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'Cifar100'
+data_name = 'ImageNet'
 data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-data_transforms = {
-        'train': transforms.Compose([
-            transforms.Resize((300, 300), Image.BILINEAR),
-            transforms.RandomCrop(IMAGE_SIZE),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            
-        ]),
-        'val': transforms.Compose([
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE), Image.BILINEAR),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
-}
-
-def load_data_cifar():
-    dataloader = []
-    dataset_sizes = []
-    trainset = torchvision.datasets.CIFAR100(root='./data',
-                                            train = True,
-                                            download = True,
-                                            transform = data_transforms['train'])
-    trainloader = torch.utils.data.DataLoader(trainset,
-                                              batch_size = BATCH_SIZE,
-                                              shuffle = True,
-                                              num_workers = 2)
-    
-    testset = torchvision.datasets.CIFAR100(root='./data',
-                                           train = False,
-                                           download = True,
-                                           transform = data_transforms['val'])
-    testloader = torch.utils.data.DataLoader(testset,
-                                             batch_size = BATCH_SIZE,
-                                             shuffle = False,
-                                             num_workers = 2)
-    
-    dataloader.append({'train' : trainloader, 'val' : testloader})
-    dataset_sizes.append({'train' : len(trainloader), 'val' : len(testloader)})
-    
-    return dataloader, None
-
-
-def load_data():
-    all_image_datasets = torchvision.datasets.ImageFolder(data_dir, data_transforms['train'])
-    
-    dataloader = []
-    dataset_sizes = []
-    if KFOLD != 1:
-        kf = KFold(KFOLD, shuffle = True)
-        for train_idx, val_idx in kf.split(all_image_datasets):
-            train_dataset = torch.utils.data.Subset(all_image_datasets, train_idx)
-            trainloader = torch.utils.data.DataLoader(train_dataset, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2)    
-            val_dataset = torch.utils.data.Subset(all_image_datasets, val_idx)
-            valloader = torch.utils.data.DataLoader(val_dataset, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2)
-            dataloader.append({'train' : trainloader, 'val' : valloader})
-            dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
-    else:
-        indices = list(range(len(all_image_datasets)))
-        dataset_size = len(all_image_datasets)
-        split = int(np.floor(VAL_SPLIT * dataset_size))
-        np.random.seed(0)
-        np.random.shuffle(indices)
-        train_indices, val_indices = indices[split:], indices[:split]
-        train_sampler = SubsetRandomSampler(train_indices)
-        valid_sampler = SubsetRandomSampler(val_indices)
-        trainloader = torch.utils.data.DataLoader(all_image_datasets,
-                                                       batch_size = BATCH_SIZE,
-                                                       sampler = train_sampler,
-                                                       num_workers = 16)
-        valloader = torch.utils.data.DataLoader(all_image_datasets,
-                                                       batch_size = BATCH_SIZE,
-                                                       sampler = valid_sampler,
-                                                       num_workers = 16)
-        dataloader.append({'train' : trainloader, 'val' : valloader})
-        dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
-        
-        
-    return dataloader, dataset_sizes, all_image_datasets
 # =============================================================================
 #     dataset_sizes = len(all_image_datasets)ting(256, kernel_size=
 #     print(dataset_sizes)
@@ -144,8 +61,8 @@ def load_data():
 
 def create_nn_model():
     global model_name
-    model_name = 'vgg_liftpool'
-    model = vgg_liftpool.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_liftpool'
+    model = resnet_liftpool.resnet18(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
@@ -239,9 +156,11 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    loss = cls_loss
+    filter_constraint = 0
     for j in range(len(model.lifting_pool)):
-        loss += 1e-4 * model.lifting_pool[j].regular_term_loss()
+        filter_constraint += model.lifting_pool[j].regular_term_loss()
+    
+    loss = filter_constraint / len(model.lifting_pool) + cls_loss
     
     if phase == 'train':
         loss.backward()
@@ -258,7 +177,7 @@ def training(job):
     global model_name
     #with torch.autograd.set_detect_anomaly(True):
     #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
-    kfold_image_data, all_image_datasets = load_data_cifar()
+    kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
     ACCMeters = []
     LOSSMeters = []
     for i in range(KFOLD):
@@ -396,3 +315,5 @@ if __name__ == '__main__':
     logging.info('Index : {}'.format(INDEX))
     logging.info("dataset : {}".format(data_dir))
     training = training(['train', 'val'])
+    #dataloader, _ = load_ImageNet("../../dataset/imagenet")
+    
