@@ -19,7 +19,7 @@ from config import *
 import tqdm
 import os
 import logging
-from load_dataset import load_ImageNet
+from load_dataset import load_ImageNet, load_data_cifar
 
 if not os.path.exists('./pkl/{}/'.format(INDEX)):
     os.mkdir('./pkl/{}/'.format(INDEX))
@@ -37,7 +37,6 @@ optimizer_select = ''
 loss_function_select = ''
 model_name = ''
 data_name = 'ImageNet'
-data_dir = '../datasets/ISIC 2019/'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
@@ -82,7 +81,7 @@ def create_opt_loss(model):
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[80, 120], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[30, 60, 90, 120, 150], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
@@ -167,7 +166,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item(), predicted.detach().cpu()
+    return loss.item(), predicted.detach().cpu(), filter_constraint.detach().cpu() / len(model.lifting_pool), cls_loss.detach().cpu()
 
 #training
 def training(job):
@@ -177,6 +176,7 @@ def training(job):
     global model_name
     #with torch.autograd.set_detect_anomaly(True):
     #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
+    #kfold_image_data, all_image_datasets = load_data_cifar("./data")
     kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
     ACCMeters = []
     LOSSMeters = []
@@ -207,7 +207,8 @@ def training(job):
             for phase in job:
                 loss_t = AverageMeter(False)
                 correct_t = AverageMeter(True)
-                cls_rate_1 = AverageMeter(False)
+                cls_rate = AverageMeter(False)
+                con_rate = AverageMeter(False)
                 
                 if phase == 'train':
                     model.train(True)
@@ -219,8 +220,10 @@ def training(job):
                         all_image_datasets.transform = data_transforms['val']
                 step = 0
                 for data, label in tqdm.tqdm(image_data[phase]):
-                    loss, predicted = train_step(model, data, label, loss_func, optimizers, phase)
+                    loss, predicted, constraint, cls_l = train_step(model, data, label, loss_func, optimizers, phase)
                     
+                    cls_rate.update(cls_l, data.size(0))
+                    con_rate.update(constraint, data.size(0))
                     loss_t.update(loss, data.size(0))
                     correct_t.update((predicted.cpu() == label).sum().item(), label.shape[0])
                     
@@ -244,8 +247,10 @@ def training(job):
                 print("dataset : {}".format(data_name))
                 print("Model name : {}".format(model_name))
                 print("{} set loss : {:.6f}".format(phase, loss_t.avg))
-                print("{} set cls_loss_1 : {:.6f}".format(phase, cls_rate_1.avg))
-                print("{} set min loss : {:.6f}".format(phase, min_loss[phase].avg))
+                print("{} set CE : {:.6f}".format(phase, cls_rate.avg))
+                print("{} set Constraint : {:.6f}".format(phase, con_rate.avg))
+                #print("{} set cls : {:.6f}".format(phase, cls_rate_1.avg))
+                #print("{} set min loss : {:.6f}".format(phase, min_loss[phase].avg))
                 print("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))
                 print("{} last update : {:.6f}%".format(phase, (max_acc[phase].avg - last_acc[phase].avg) * 100.))
                 print("{} set max acc : {:.6f}%".format(phase, max_acc[phase].avg * 100.))
@@ -313,7 +318,7 @@ def rand_bbox(size, lam):
 if __name__ == '__main__':
     logging.basicConfig(filename = './pkl/{}/logging.txt'.format(INDEX), level=logging.DEBUG)
     logging.info('Index : {}'.format(INDEX))
-    logging.info("dataset : {}".format(data_dir))
+    logging.info("dataset : {}".format(data_name))
     training = training(['train', 'val'])
     #dataloader, _ = load_ImageNet("../../dataset/imagenet")
     

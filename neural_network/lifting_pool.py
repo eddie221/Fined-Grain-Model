@@ -39,7 +39,7 @@ class Lifting_down(nn.Module):
         # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
         constraint2 = torch.mean(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
                        torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2) +\
-                           torch.sum(self.high_pass_filter_h, dim = 3) + torch.sum(self.high_pass_filter_v, dim = 2), dim = 0).squeeze(-1)
+                           torch.pow(torch.sum(self.high_pass_filter_h, dim = 3), 2) + torch.pow(torch.sum(self.high_pass_filter_v, dim = 2), 2), dim = 0).squeeze(-1)
             
         # constraint3 => H'H + L'L = 1
         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)

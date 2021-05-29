@@ -40,12 +40,12 @@ def load_ImageNet(path):
     trainloader = torch.utils.data.DataLoader(trainset,
                                               batch_size = BATCH_SIZE,
                                               shuffle = True,
-                                              num_workers = 64)
+                                              num_workers = 32)
     valset = torchvision.datasets.ImageFolder(path + '/val', data_transforms['val'])
     valloader = torch.utils.data.DataLoader(valset,
                                             batch_size = BATCH_SIZE,
                                             shuffle = True,
-                                            num_workers = 64)
+                                            num_workers = 32)
     dataloader.append({'train' : trainloader, 'val' : valloader})
     dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
     return dataloader, None
