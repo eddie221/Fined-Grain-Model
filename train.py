@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -61,7 +61,7 @@ def get_lr(optimizer):
 def create_nn_model():
     global model_name
     model_name = 'resnet_liftpool'
-    model = resnet_liftpool.resnet18(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
