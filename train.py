@@ -8,6 +8,7 @@ Created on Tue Nov 10 09:54:05 2020
 
 import neural_network.vgg_liftpool as vgg_liftpool
 import neural_network.resnet_liftpool as resnet_liftpool
+import neural_network.mobilenet_liftpool as mobilenet_liftpool
 import torch
 import neural_network.resnet as resnet
 #import args
@@ -27,7 +28,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -60,8 +61,8 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_liftpool'
-    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'mobilenet_liftpool'
+    model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 

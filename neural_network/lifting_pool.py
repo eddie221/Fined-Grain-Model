@@ -96,6 +96,26 @@ class Lifting_down(nn.Module):
 # =============================================================================
         return x_all
 
+class Energy_attention(nn.Module):
+    def __init__(self, in_cha):
+        super(Energy_attention, self).__init__()
+        self.instance_norm = nn.InstanceNorm2d(in_cha)
+        self.relu = nn.ReLU()
+        self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 4),
+                                nn.ReLU(),
+                                nn.Linear(in_cha // 4, in_cha),
+                                nn.Sigmoid())
+        
+    def forward(self, x):
+        x_norm = self.instance_norm(x)
+        x_norm = self.relu(x_norm)
+        x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
+        
+        x_energy = self.SE(x_energy)
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
+        
+        return x
+
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
     if pad_mode == 'discard':
         img = img[:, :, :img.shape[2] // 2 * 2, :img.shape[3] // 2 * 2]
