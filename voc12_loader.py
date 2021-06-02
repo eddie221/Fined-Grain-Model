@@ -13,6 +13,7 @@ import torch
 import numpy as np
 import torchvision.transforms as transforms
 import os
+#import matplotlib.pyplot as plt
 
 class voc12Dataset(Dataset):
     def __init__(self, dataset_path, phase, image_transform):
@@ -22,7 +23,6 @@ class voc12Dataset(Dataset):
         self.dataset_path = dataset_path
         self.root = dataset_path
         self.image_transform = image_transform
-        self.gt_transform = transforms.Compose(self.image_transform.transforms[:-2])
         self.image_pool = glob.glob("{}/{}/*".format(dataset_path, phase))  
         assert len(self.image_pool) != 0, "Can't find image in {}".format("{}/{}/*".format(dataset_path, phase))
         
@@ -37,9 +37,22 @@ class voc12Dataset(Dataset):
         image = Image.open(image_path)
         ground_truth_path = os.path.join(self.root, "ground_truth/{}.png".format(image_name))
         gt = np.array(Image.open(ground_truth_path))
+# =============================================================================
+#         plt.figure()
+#         plt.imshow(image)
+#         plt.figure()
+#         plt.imshow(gt)
+# =============================================================================
         gt[gt > 25] = 0
-        image = self.image_transform(image)
-        gt = self.gt_transform(Image.fromarray(gt))
+        image, gt = self.image_transform(image, Image.fromarray(gt))
+        image = transforms.ToTensor()(image)
+        image = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(image)
+# =============================================================================
+#         plt.figure()
+#         plt.imshow(image.permute(1, 2, 0))
+#         plt.figure()
+#         plt.imshow(gt)
+# =============================================================================
         
         gt = torch.as_tensor(np.array(gt), dtype=torch.int64)
         

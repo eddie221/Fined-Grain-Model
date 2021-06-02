@@ -6,7 +6,7 @@ Created on Mon May 31 13:30:26 2021
 @author: mmplab603
 """
 
-import neural_network.SegNet as SegNet
+import neural_network.UNet as UNet
 import torch
 #import args
 import numpy as np
@@ -16,23 +16,21 @@ import tqdm
 import os
 import logging
 from load_dataset_seg import load_voc12
+import neural_network.resnet_seg as resnet_seg
 
 if not os.path.exists('./pkl/{}/'.format(INDEX)):
     os.mkdir('./pkl/{}/'.format(INDEX))
-#from torch.utils.tensorboard import SummaryWriter
 
 #print environment information
 print(torch.cuda.is_available())
 DEVICE = 'cuda:0'
-
-#writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
 use_gpu = torch.cuda.is_available()
 
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'ImageNet'
+data_name = 'voc12'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
@@ -56,8 +54,8 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'SegNet'
-    model = SegNet.SegNet(input_channels = 3, output_channels = NUM_CLASS).to(DEVICE)
+    model_name = 'Resnet_seg'
+    model = resnet_seg.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     print(NUM_CLASS)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
@@ -70,18 +68,18 @@ def create_nn_model():
 def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
-    optimizer = [torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
-                 #torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+    optimizer = [#torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
+                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
 # =============================================================================
 #                  torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
 #                                    {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[30, 60, 90, 120, 150], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[50, 100, 150, 200, 250, 300, 350, 400, 450], gamma=0.1),
                         ]
     
-    loss_func = [torch.nn.CrossEntropyLoss(ignore_index = 255),]
+    loss_func = [torch.nn.CrossEntropyLoss(),]
     optimizer_select = 'SGD'
     loss_function_select = 'crossentropy'
     return optimizer, set_lr_secheduler, loss_func
@@ -135,17 +133,48 @@ def load_param(model):
 # =============================================================================
             
     return model
+# =============================================================================
+# 
+# def mIoU(pred_mask, mask, n_classes=23, smooth=1e-10):
+#     with torch.no_grad():
+#         pred_mask = torch.nn.functional.softmax(pred_mask, dim=1)
+#         pred_mask = torch.argmax(pred_mask, dim=1)
+#         pred_mask = pred_mask.contiguous().view(-1)
+#         mask = mask.contiguous().view(-1)
+# 
+#         iou_per_class = []
+#         for clas in range(0, n_classes): #loop per pixel class
+#             true_class = pred_mask == clas
+#             true_label = mask == clas
+# 
+#             if true_label.long().sum().item() == 0: #no exist label in this loop
+#                 iou_per_class.append(np.nan)
+#             else:
+#                 intersect = torch.logical_and(true_class, true_label).sum().float().item()
+#                 union = torch.logical_or(true_class, true_label).sum().float().item()
+# 
+#                 iou = (intersect + smooth) / (union +smooth)
+#                 iou_per_class.append(iou)
+#         return np.nanmean(iou_per_class)
+# =============================================================================
 
-def mIoU(o_pred, o_target, n_classes = 21):
-    mIoU = 0
-    for batch in range(o_pred.shape[0]):
+def mIoU(pred, target, n_classes = 21):
+    with torch.no_grad():
         ious = []
-        pred = o_pred[batch].view(-1)
-        target = o_target[batch].view(-1)
-        count = 0
-        iousum = 0
+        pred = torch.argmax(pred, dim = 1)
+# =============================================================================
+#         for i in range(4):
+#             plt.subplot(4, 2, i * 2 + 1)
+#             plt.imshow(pred[i])
+#             plt.subplot(4, 2, i * 2 + 2)
+#             plt.imshow(target[i])
+#         plt.show()
+# =============================================================================
+        pred = pred.view(-1)
+        target = target.view(-1)
+        test = 0
         # Ignore IoU for background class ("0")
-        for cls in range(1, n_classes):  # This goes from 1:n_classes-1 -> class "0" is ignored
+        for cls in range(n_classes):  # This goes from 1:n_classes-1 -> class "0" is ignored
             pred_inds = pred == cls
             target_inds = target == cls
             intersection = (pred_inds[target_inds]).long().sum()  # Cast to long to prevent overflows
@@ -153,13 +182,10 @@ def mIoU(o_pred, o_target, n_classes = 21):
             if union == 0:
                 ious.append(float("nan"))  # If there is no ground truth, do not include in evaluation
             else:
-                count += 1
-                ious.append(float(intersection) / float(max(union, 1)))
-                iousum += float(intersection) / float(max(union, 1))
-        if count == 0:
-            count = 1
-        mIoU += iousum / count
-    return mIoU / pred.shape[0]
+                ious.append(float(intersection) / float(union))
+        ious = np.array(ious)
+        miou = np.nanmean(ious)
+    return miou
 
 def train_step(model, data, label, loss_func, optimizers, phase):
     if use_gpu:
@@ -171,20 +197,9 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     for optimizer in optimizers:
         optimizer.zero_grad() 
-    output_1, _ = model(b_data)
-    
-    predicted = torch.nn.functional.sigmoid(output_1.data)
-    predicted = torch.argmax(predicted, dim = 1)
-    #miou = mIoU(predicted, label, NUM_CLASS)
-# =============================================================================
-#     predicted = predicted[predicted > 0.5] * 1
-#     gt = torch.zeros(gt.shape)
-#     uniqe_class = torch.unique(b_label.data)
-#     union = predicted * gt
-#     intersect = predicted + gt - union
-#     IoU = union * 2 / intersect
-# =============================================================================
-    
+    output_1 = model(b_data)
+    #if phase == 'val':
+    #miou = mIoU(output_1.cpu().data, label, NUM_CLASS)
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     loss = cls_loss
@@ -200,7 +215,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item()#, miou
+    return loss.item(), output_1.detach().cpu().data
 
 #training
 def training(job):
@@ -213,10 +228,11 @@ def training(job):
     #kfold_image_data, all_image_datasets = load_data_cifar("./data")
     kfold_image_data, all_image_datasets = load_voc12("./SegmentationClassAug")
     #kfold_image_data, all_image_datasets = load_voc12("/home/mmplab603/program/datasets/VOCdevkit/VOC2012/SegmentationClassAug/")
-    ACCMeters = []
+    miouMeters = []
     LOSSMeters = []
+    miou_class = MIOU(num_classes = NUM_CLASS)
     for i in range(KFOLD):
-        ACCMeters.append(AverageMeter(True))
+        miouMeters.append(0.0)
         LOSSMeters.append(AverageMeter(False))
         
     for index, image_data in enumerate(kfold_image_data):
@@ -227,9 +243,9 @@ def training(job):
         else:
             print("Not load pretrained")
         optimizers, lr_schedulers, loss_func = create_opt_loss(model)
-        max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        max_miou = {'train' : 0.0, 'val' : 0.0}
         min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}
-        last_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        last_miou = {'train' : 0.0, 'val' : 0.0}
         
         for epoch in range(1, EPOCH + 1):
             start = time.time()
@@ -240,10 +256,11 @@ def training(job):
             if CON_MATRIX:
                 confusion_matrix = {'train' : np.zeros([NUM_CLASS, NUM_CLASS]), 'val' : np.zeros([NUM_CLASS, NUM_CLASS])}
             for phase in job:
+                print("phase", phase)
                 loss_t = AverageMeter(False)
-                correct_t = AverageMeter(True)
                 cls_rate = AverageMeter(False)
-                con_rate = AverageMeter(False)
+                inter_record = AverageMeter(False)
+                union_record = AverageMeter(False)
                 
                 if phase == 'train':
                     model.train(True)
@@ -253,37 +270,49 @@ def training(job):
                     model.train(False)
                     if all_image_datasets is not None:
                         all_image_datasets.transform = data_transforms['val']
-                step = 0
+                step = 1
                 for data, label in tqdm.tqdm(image_data[phase]):
-                    loss = train_step(model, data, label, loss_func, optimizers, phase)
+# =============================================================================
+#                     if step == 5:
+#                         break
+# =============================================================================
+                    loss, output = train_step(model, data, label, loss_func, optimizers, phase)
+                    inter, union = miou_class.get_iou(output, label)
+                    inter_record.update(inter)
+                    union_record.update(union)
+# =============================================================================
+#                     if phase == 'train':
+#                         writer.add_images("images", output[0].view(-1, 224, 224, 1), step + (epoch - 1) * 5, dataformats = "NHWC")
+#                         writer.add_images("label", label[0].view(-1, 224, 224, 1), step + (epoch - 1) * 5, dataformats = "NHWC")
+# =============================================================================
                     loss_t.update(loss, data.size(0))
-                    #correct_t.update(miou, data.size(0))
-                    
                     step += 1
                     if CON_MATRIX:
                         np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
-                if max_acc[phase].avg < correct_t.avg:
-                    last_acc[phase] = max_acc[phase]
-                    max_acc[phase] = correct_t
+                
+                if max_miou[phase] < (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100:
+                    last_miou[phase] = max_miou[phase]
+                    max_miou[phase] = (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100
                     
                     if phase == 'val':
-                        ACCMeters[index] = correct_t
+                        miouMeters[index] = (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100
                         LOSSMeters[index] = loss_t
                         save_data = model.state_dict()
                         print('save')
                         torch.save(save_data, './pkl/{}/fold_{}_best_{}.pkl'.format(INDEX, index, INDEX))
                         
                 logging.info("{} set loss : {:.6f}".format(phase, loss_t.avg))        
-                logging.info("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))        
+                logging.info("{} set mIoU : {:.6f}%".format(phase, (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100))        
                 print('Index : {}'.format(INDEX))
                 print("dataset : {}".format(data_name))
                 print("Model name : {}".format(model_name))
                 print("{} set loss : {:.6f}".format(phase, loss_t.avg))
+                print(inter_record.sum / (union_record.sum + 1e-10) * 100)
                 #print("{} set cls : {:.6f}".format(phase, cls_rate_1.avg))
                 #print("{} set min loss : {:.6f}".format(phase, min_loss[phase].avg))
-                print("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))
-                print("{} last update : {:.6f}%".format(phase, (max_acc[phase].avg - last_acc[phase].avg) * 100.))
-                print("{} set max acc : {:.6f}%".format(phase, max_acc[phase].avg * 100.))
+                print("{} set mIoU : {:.6f}".format(phase, (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100))
+                print("{} last update : {:.6f}".format(phase, (max_miou[phase] - last_miou[phase])))
+                print("{} set max mIoU : {:.6f}".format(phase, max_miou[phase]))
                 if CON_MATRIX:
                     print("{} confusion matrix :".format(phase))
                     print(confusion_matrix[phase])
@@ -297,13 +326,13 @@ def training(job):
         del optimizers
         del lr_schedulers
         del loss_func
-    acc = 0
+    miou = 0
     loss = 0
-    for idx in range(1, len(ACCMeters) + 1):
-        print("Fold {} best acc : {:.6f} loss : {:.6f}".format(idx, ACCMeters[idx - 1].avg, LOSSMeters[idx - 1].avg))
-        acc += ACCMeters[idx - 1].avg
+    for idx in range(1, len(miouMeters) + 1):
+        print("Fold {} best miou : {:.6f} loss : {:.6f}".format(idx, miouMeters[idx - 1], LOSSMeters[idx - 1].avg))
+        miou += miouMeters[idx - 1].avg
         loss += LOSSMeters[idx - 1].avg
-    print("Avg. ACC : {:.6f} Avg. Loss : {:.6f}".format(acc / KFOLD, loss / KFOLD))
+    print("Avg. miou : {:.6f} Avg. Loss : {:.6f}".format(miou * 100. / KFOLD, loss / KFOLD))
     
 class AverageMeter():
     """Computes and stores the average and current value"""
@@ -317,7 +346,7 @@ class AverageMeter():
         self.sum = 0
         self.count = 0
 
-    def update(self, value, batch):
+    def update(self, value, batch = 1):
         self.value = value
         if self.acc:
             self.sum += value
@@ -326,6 +355,39 @@ class AverageMeter():
         self.count += batch
         self.avg = self.sum / self.count
 
+class MIOU(object):
+    def __init__(self, num_classes=21):
+        self.num_classes = num_classes
+        self.epsilon = 1e-6
+
+    def get_iou(self, output, target):
+        if isinstance(output, tuple):
+            output = output[0]
+
+        _, pred = torch.max(output, 1)
+
+        # histc in torch is implemented only for cpu tensors, so move your tensors to CPU
+        if pred.device == torch.device('cuda'):
+            pred = pred.cpu()
+        if target.device == torch.device('cuda'):
+            target = target.cpu()
+
+# =============================================================================
+#         pred = pred.type(torch.ByteTensor)
+#         target = target.type(torch.ByteTensor)
+# =============================================================================
+
+        # shift by 1 so that 255 is 0
+        pred += 1
+        target += 1
+        pred = pred * (target > 0).long()
+        inter = pred * (pred == target).long()
+        area_inter = torch.histc(inter.float(), bins=self.num_classes, min=1, max=self.num_classes)
+        area_pred = torch.histc(pred.float(), bins=self.num_classes, min=1, max=self.num_classes)
+        area_mask = torch.histc(target.float(), bins=self.num_classes, min=1, max=self.num_classes)
+        area_union = area_pred + area_mask - area_inter + self.epsilon
+
+        return area_inter.numpy(), area_union.numpy()
         
 def rand_bbox(size, lam):
     W = size[2]
