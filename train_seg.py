@@ -17,13 +17,14 @@ import os
 import logging
 from load_dataset_seg import load_voc12
 import neural_network.resnet_seg as resnet_seg
+import neural_network.resnet_seg_LDW as resnet_seg_LDW
 
 if not os.path.exists('./pkl/{}/'.format(INDEX)):
     os.mkdir('./pkl/{}/'.format(INDEX))
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 use_gpu = torch.cuda.is_available()
 
@@ -54,17 +55,17 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'Resnet_seg'
+    model_name = 'Resnet_seg_LDW'
     #model_name = 'UNet'
-    model = resnet_seg.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet_seg_LDW.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = UNet.UNet(3, NUM_CLASS).to(DEVICE)
     print(NUM_CLASS)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
     
     print(model)
-    if 'liftpool' in model_name:
-        print("lift pooling : {}".format(len(model.lifting_pool)))
+    if 'LDW' in model_name:
+        print("LDW-pooling : {}".format(len(model.lifting_pool)))
     return model
 
 def create_opt_loss(model):
