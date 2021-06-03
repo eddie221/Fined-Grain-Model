@@ -8,6 +8,7 @@ Created on Wed Jun  2 20:48:58 2021
 
 import torch
 import torch.nn as nn
+from neural_network.UNet_parts import *
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
@@ -125,8 +126,7 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
 
         return out
-
-
+    
 class ResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
@@ -161,8 +161,13 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
-        self.conv_class = nn.Conv2d(2048, num_classes, 1)
-
+        
+        self.up1 = Up(2048, 1024, False)
+        self.up2 = Up(1024, 512, False)
+        self.up3 = Up(512, 128, False)
+        self.up4 = Up(128, 64, False)
+        self.up5 = Up(64, num_classes, False)
+        
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -209,16 +214,19 @@ class ResNet(nn.Module):
         # See note [TorchScript super()]
         x = self.conv1(x)
         x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x_head = self.relu(x)
+        x0 = self.maxpool(x_head)
         
-        x = self.conv_class(x)
-        x = torch.nn.functional.upsample(x, size = H, mode = 'bilinear', align_corners = True)
+        x1 = self.layer1(x0)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
+        
+        x = self.up1(x4, x3)
+        x = self.up2(x, x2)
+        x = self.up3(x, x1)
+        x = self.up4(x, x_head)
+        x = F.interpolate(x, size = H, mode = 'bilinear', align_corners = True)
 
         return x
 

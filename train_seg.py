@@ -55,7 +55,9 @@ def get_lr(optimizer):
 def create_nn_model():
     global model_name
     model_name = 'Resnet_seg'
+    #model_name = 'UNet'
     model = resnet_seg.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    #model = UNet.UNet(3, NUM_CLASS).to(DEVICE)
     print(NUM_CLASS)
     #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
@@ -68,8 +70,8 @@ def create_nn_model():
 def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
-    optimizer = [#torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
-                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+    optimizer = [torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
+                 #torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
 # =============================================================================
 #                  torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
 #                                    {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
@@ -261,6 +263,7 @@ def training(job):
                 cls_rate = AverageMeter(False)
                 inter_record = AverageMeter(False)
                 union_record = AverageMeter(False)
+                #print(inter_record.avg / union_record.avg)
                 
                 if phase == 'train':
                     model.train(True)
@@ -272,19 +275,10 @@ def training(job):
                         all_image_datasets.transform = data_transforms['val']
                 step = 1
                 for data, label in tqdm.tqdm(image_data[phase]):
-# =============================================================================
-#                     if step == 5:
-#                         break
-# =============================================================================
                     loss, output = train_step(model, data, label, loss_func, optimizers, phase)
                     inter, union = miou_class.get_iou(output, label)
                     inter_record.update(inter)
                     union_record.update(union)
-# =============================================================================
-#                     if phase == 'train':
-#                         writer.add_images("images", output[0].view(-1, 224, 224, 1), step + (epoch - 1) * 5, dataformats = "NHWC")
-#                         writer.add_images("label", label[0].view(-1, 224, 224, 1), step + (epoch - 1) * 5, dataformats = "NHWC")
-# =============================================================================
                     loss_t.update(loss, data.size(0))
                     step += 1
                     if CON_MATRIX:
@@ -330,9 +324,9 @@ def training(job):
     loss = 0
     for idx in range(1, len(miouMeters) + 1):
         print("Fold {} best miou : {:.6f} loss : {:.6f}".format(idx, miouMeters[idx - 1], LOSSMeters[idx - 1].avg))
-        miou += miouMeters[idx - 1].avg
+        miou += miouMeters[idx - 1]
         loss += LOSSMeters[idx - 1].avg
-    print("Avg. miou : {:.6f} Avg. Loss : {:.6f}".format(miou * 100. / KFOLD, loss / KFOLD))
+    print("Avg. miou : {:.6f} Avg. Loss : {:.6f}".format(miou / KFOLD, loss / KFOLD))
     
 class AverageMeter():
     """Computes and stores the average and current value"""
