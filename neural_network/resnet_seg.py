@@ -164,9 +164,8 @@ class ResNet(nn.Module):
         
         self.up1 = Up(2048, 1024, False)
         self.up2 = Up(1024, 512, False)
-        self.up3 = Up(512, 128, False)
-        self.up4 = Up(128, 64, False)
-        self.up5 = Up(64, num_classes, False)
+        self.up3 = Up(512, 256, False)
+        self.up4 = Up(256, num_classes, False)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
