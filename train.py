@@ -61,9 +61,9 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'mobilenet_liftpool'
-    model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
-    #model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_liftpool'
+    #model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet_liftpool.resnet18(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
@@ -87,7 +87,7 @@ def create_opt_loss(model):
     
     loss_func = [torch.nn.CrossEntropyLoss(),
                  torch.nn.MSELoss()]
-    optimizer_select = 'Adam'
+    optimizer_select = 'SGD'
     loss_function_select = 'crossentropy'
     return optimizer, set_lr_secheduler, loss_func
 
