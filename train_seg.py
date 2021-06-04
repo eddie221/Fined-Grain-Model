@@ -24,7 +24,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 use_gpu = torch.cuda.is_available()
 
@@ -205,13 +205,11 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #miou = mIoU(output_1.cpu().data, label, NUM_CLASS)
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    loss = cls_loss
-# =============================================================================
-#     for j in range(len(model.lifting_pool)):
-#         filter_constraint += model.lifting_pool[j].regular_term_loss()
-#     
-#     loss = filter_constraint / len(model.lifting_pool) + cls_loss
-# =============================================================================
+    filter_constraint = 0
+    for j in range(len(model.lifting_pool)):
+        filter_constraint += model.lifting_pool[j].regular_term_loss()
+    
+    loss = filter_constraint / len(model.lifting_pool) + cls_loss
     
     if phase == 'train':
         loss.backward()
@@ -403,7 +401,7 @@ def rand_bbox(size, lam):
     return bbx1, bby1, bbx2, bby2
 
 if __name__ == '__main__':
-    logging.basicConfig(filename = './pkl/{}/logging.txt'.format(INDEX), level=logging.DEBUG)
+    logging.basicConfig(filename = './pkl/{}/logging.txt'.format(INDEX), level=logging.INFO)
     logging.info('Index : {}'.format(INDEX))
     logging.info("dataset : {}".format(data_name))
     training = training(['train', 'val'])

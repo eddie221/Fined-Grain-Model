@@ -279,6 +279,8 @@ class ResNet(nn.Module):
         for m in self.modules():
             if isinstance(m, Lifting_down):
                 self.lifting_pool.append(m)
+            if isinstance(m, Lifting_up):
+                self.lifting_pool.append(m)
 
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
         downsample = None
