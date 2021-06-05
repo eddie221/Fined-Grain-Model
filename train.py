@@ -7,8 +7,7 @@ Created on Tue Nov 10 09:54:05 2020
 """
 
 import neural_network.vgg_liftpool as vgg_liftpool
-import neural_network.resnet_liftpool as resnet_liftpool
-import neural_network.mobilenet_liftpool as mobilenet_liftpool
+import neural_network.resnet_LDW as resnet_LDW
 import torch
 import neural_network.resnet as resnet
 #import args
@@ -37,7 +36,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'ImageNet'
+data_name = 'cifar100'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
@@ -61,14 +60,14 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_liftpool'
+    model_name = 'resnet_LDW'
     #model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
-    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet_LDW.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    if 'liftpool' in model_name:
-        print("lift pooling : {}".format(len(model.lifting_pool)))
+    if 'LDW' in model_name:
+        print("LDW-pooling : {}".format(len(model.LDW_pool)))
     return model
 
 def create_opt_loss(model):
@@ -158,17 +157,17 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
     filter_constraint = 0
-    for j in range(len(model.lifting_pool)):
-        filter_constraint += model.lifting_pool[j].regular_term_loss()
+    for j in range(len(model.LDW_pool)):
+        filter_constraint += model.LDW_pool[j].regular_term_loss()
     
-    loss = filter_constraint / len(model.lifting_pool) + cls_loss
+    loss = filter_constraint / len(model.LDW_pool) + cls_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item(), predicted.detach().cpu(), predicted5.detach().cpu(), filter_constraint.detach().cpu() / len(model.lifting_pool), cls_loss.detach().cpu()
+    return loss.item(), predicted.detach().cpu(), predicted5.detach().cpu(), filter_constraint.detach().cpu() / len(model.LDW_pool), cls_loss.detach().cpu()
 
 #training
 def training(job):
@@ -178,8 +177,8 @@ def training(job):
     global model_name
     #with torch.autograd.set_detect_anomaly(True):
     #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
-    #kfold_image_data, all_image_datasets = load_data_cifar("./data")
-    kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
+    kfold_image_data, all_image_datasets = load_data_cifar("./data")
+    #kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
     ACCMeters = []
     LOSSMeters = []
     for i in range(KFOLD):

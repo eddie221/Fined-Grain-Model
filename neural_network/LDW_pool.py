@@ -9,9 +9,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-class Lifting_down(nn.Module):
+class LDW_down(nn.Module):
     def __init__(self, channel, kernel_size = 2, stride = None, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
-        super(Lifting_down, self).__init__()
+        super(LDW_down, self).__init__()
         self.pad_mode = pad_mode
         self.pad_place = pad_place
         self.kernel_size = kernel_size
@@ -104,9 +104,9 @@ class Lifting_down(nn.Module):
 # =============================================================================
         return x_all
     
-class Lifting_up(nn.Module):
+class LDW_up(nn.Module):
     def __init__(self, channel, kernel_size = 2, stride = None, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
-        super(Lifting_up, self).__init__()
+        super(LDW_up, self).__init__()
         self.pad_mode = pad_mode
         self.pad_place = pad_place
         self.kernel_size = kernel_size
