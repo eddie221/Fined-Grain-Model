@@ -8,7 +8,7 @@ Created on Tue Mar 23 16:34:25 2021
 
 import torch
 import torch.nn as nn
-from neural_network.lifting_pool import Lifting_down
+from neural_network.lifting_pool import Lifting_down, Energy_attention
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -183,26 +183,6 @@ class Bottleneck_LDW(nn.Module):
 
         return out
     
-class Energy_attention(nn.Module):
-    def __init__(self, in_cha):
-        super(Energy_attention, self).__init__()
-        self.instance_norm = nn.InstanceNorm2d(in_cha)
-        self.relu = nn.ReLU()
-        self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 4),
-                                nn.ReLU(),
-                                nn.Linear(in_cha // 4, in_cha),
-                                nn.Sigmoid())
-        
-    def forward(self, x):
-        x_norm = self.instance_norm(x)
-        x_norm = self.relu(x_norm)
-        x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
-        
-        x_energy = self.SE(x_energy)
-        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
-        
-        return x
-    
 class Resnet(nn.Module):
     def __init__(self, num_classes, layers, block, LDW_block):
         super(Resnet, self).__init__()
@@ -327,7 +307,6 @@ def resnet101(num_classes = 1000):
 if __name__ == "__main__":
     model = resnet18(10).to("cuda:0")
     a = torch.randn([2, 3, 224, 224]).to("cuda:0")
-    optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     print(len(model.lifting_pool))
     with open('../resnet18_lifting.txt', 'w') as f:
         print(model, file = f)
@@ -341,7 +320,7 @@ if __name__ == "__main__":
 #     param = torch.load('../pkl/fold_0_best_20210408-3.pkl')
 #     model.load_state_dict(param)
 # =============================================================================
-    
+    optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     loss_f = torch.nn.CrossEntropyLoss()
     label = torch.tensor([0, 1]).cuda()
     for i in range(5):

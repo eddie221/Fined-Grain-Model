@@ -28,7 +28,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -63,7 +63,7 @@ def create_nn_model():
     global model_name
     model_name = 'resnet_liftpool'
     #model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
-    model = resnet_liftpool.resnet18(num_classes = NUM_CLASS).to(DEVICE)
+    model = resnet_liftpool.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
@@ -82,7 +82,7 @@ def create_opt_loss(model):
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[30, 60, 90, 120, 150], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[50, 100, 150, 200, 250, 300, 350], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
@@ -153,6 +153,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         optimizer.zero_grad() 
     output_1 = model(b_data)
     _, predicted = torch.max(output_1.data, 1)
+    _, predicted5 = torch.topk(output_1.data, 5, dim = 1)
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
@@ -167,7 +168,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item(), predicted.detach().cpu(), filter_constraint.detach().cpu() / len(model.lifting_pool), cls_loss.detach().cpu()
+    return loss.item(), predicted.detach().cpu(), predicted5.detach().cpu(), filter_constraint.detach().cpu() / len(model.lifting_pool), cls_loss.detach().cpu()
 
 #training
 def training(job):
@@ -194,8 +195,10 @@ def training(job):
             print("Not load pretrained")
         optimizers, lr_schedulers, loss_func = create_opt_loss(model)
         max_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        max_acc5 = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         min_loss = {'train' : AverageMeter(False), 'val' : AverageMeter(False)}
         last_acc = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
+        last_acc5 = {'train' : AverageMeter(True), 'val' : AverageMeter(True)}
         
         for epoch in range(1, EPOCH + 1):
             start = time.time()
@@ -208,6 +211,7 @@ def training(job):
             for phase in job:
                 loss_t = AverageMeter(False)
                 correct_t = AverageMeter(True)
+                correct_t5 = AverageMeter(True)
                 cls_rate = AverageMeter(False)
                 con_rate = AverageMeter(False)
                 
@@ -221,16 +225,28 @@ def training(job):
                         all_image_datasets.transform = data_transforms['val']
                 step = 0
                 for data, label in tqdm.tqdm(image_data[phase]):
-                    loss, predicted, constraint, cls_l = train_step(model, data, label, loss_func, optimizers, phase)
+                    loss, predicted, predicted5, constraint, cls_l = train_step(model, data, label, loss_func, optimizers, phase)
                     
                     cls_rate.update(cls_l, data.size(0))
                     con_rate.update(constraint, data.size(0))
                     loss_t.update(loss, data.size(0))
-                    correct_t.update((predicted.cpu() == label).sum().item(), label.shape[0])
+                    correct_t.update((predicted == label).sum().item(), label.shape[0])
+                    correct_t5.update((predicted5 == label.unsqueeze(1)).sum().item(), label.shape[0])
                     
                     step += 1
                     if CON_MATRIX:
                         np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
+                
+                if max_acc5[phase].avg < correct_t5.avg:
+                    last_acc5[phase] = max_acc5[phase]
+                    max_acc5[phase] = correct_t5
+                    
+                    if phase == 'val':
+                        save_data = model.state_dict()
+                        print('save')
+                        torch.save(save_data, './pkl/{}/fold_{}_best5_{}.pkl'.format(INDEX, index, INDEX))
+                        
+                
                 if max_acc[phase].avg < correct_t.avg:
                     last_acc[phase] = max_acc[phase]
                     max_acc[phase] = correct_t
@@ -255,6 +271,8 @@ def training(job):
                 print("{} set acc : {:.6f}%".format(phase, correct_t.avg * 100.))
                 print("{} last update : {:.6f}%".format(phase, (max_acc[phase].avg - last_acc[phase].avg) * 100.))
                 print("{} set max acc : {:.6f}%".format(phase, max_acc[phase].avg * 100.))
+                print("{} last update(5) : {:.6f}%".format(phase, (max_acc5[phase].avg - last_acc5[phase].avg) * 100.))
+                print("{} set max acc(5) : {:.6f}%".format(phase, max_acc5[phase].avg * 100.))
                 if CON_MATRIX:
                     print("{} confusion matrix :".format(phase))
                     print(confusion_matrix[phase])
