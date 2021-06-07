@@ -6,7 +6,7 @@ Created on Tue Nov 10 09:54:05 2020
 @author: eddie
 """
 
-import neural_network.vgg_liftpool as vgg_liftpool
+import neural_network.vgg_LDW as vgg_LDW
 import neural_network.resnet_LDW as resnet_LDW
 import torch
 import neural_network.resnet as resnet
@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -61,8 +61,8 @@ def get_lr(optimizer):
 def create_nn_model():
     global model_name
     model_name = 'resnet_LDW'
-    #model = mobilenet_liftpool.mobilenet_v2(num_classes = NUM_CLASS).to(DEVICE)
     model = resnet_LDW.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    #model = vgg_LDW.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
@@ -73,20 +73,20 @@ def create_nn_model():
 def create_opt_loss(model):
     global optimizer_select
     global loss_function_select
-    optimizer = [torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
-                 #torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
+    optimizer = [#torch.optim.SGD(model.parameters(), lr = LR, momentum = 0.9, weight_decay = 5e-4),
+                 torch.optim.Adam(model.parameters(), lr = LR, weight_decay = 1e-4)
 # =============================================================================
 #                  torch.optim.Adam([{'params' : [param for name, param in model.named_parameters() if name != 'Lifting_down']},
 #                                    {'params' : [param for name, param in model.named_parameters() if name == 'Lifting_down'], 'lr' : 1e-3}],
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[50, 100, 150, 200, 250, 300, 350], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[100, 200, 300], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
                  torch.nn.MSELoss()]
-    optimizer_select = 'SGD'
+    optimizer_select = 'Adam'
     loss_function_select = 'crossentropy'
     return optimizer, set_lr_secheduler, loss_func
 

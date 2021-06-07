@@ -307,7 +307,7 @@ def resnet101(num_classes = 1000):
 if __name__ == "__main__":
     model = resnet18(10).to("cuda:0")
     a = torch.randn([2, 3, 224, 224]).to("cuda:0")
-    print(len(model.lifting_pool))
+    print(len(model.LDW_pool))
     with open('../resnet18_lifting.txt', 'w') as f:
         print(model, file = f)
 # =============================================================================
@@ -327,8 +327,8 @@ if __name__ == "__main__":
         output = model(a)
         optim.zero_grad()
         loss = loss_f(output, label)
-        for j in range(len(model.lifting_pool)):
-            loss += 1e-4 * model.lifting_pool[j].regular_term_loss().squeeze(0)
+        for j in range(len(model.LDW_pool)):
+            loss += 1e-4 * model.LDW_pool[j].regular_term_loss().squeeze(0)
         loss.backward()
         print(loss)
         optim.step()
