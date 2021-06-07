@@ -50,7 +50,7 @@ def load_ImageNet(path):
     dataset_sizes.append({'train' : len(trainloader), 'val' : len(valloader)})
     return dataloader, None
 
-def load_data_cifar(path):
+def load_data_cifar100(path):
     dataloader = []
     dataset_sizes = []
     trainset = torchvision.datasets.CIFAR100(root=path,
@@ -63,6 +63,32 @@ def load_data_cifar(path):
                                               num_workers = 2)
     
     testset = torchvision.datasets.CIFAR100(root=path,
+                                           train = False,
+                                           download = True,
+                                           transform = data_transforms['val'])
+    testloader = torch.utils.data.DataLoader(testset,
+                                             batch_size = BATCH_SIZE,
+                                             shuffle = False,
+                                             num_workers = 2)
+    
+    dataloader.append({'train' : trainloader, 'val' : testloader})
+    dataset_sizes.append({'train' : len(trainloader), 'val' : len(testloader)})
+    
+    return dataloader, None
+
+def load_data_cifar10(path):
+    dataloader = []
+    dataset_sizes = []
+    trainset = torchvision.datasets.CIFAR10(root=path,
+                                            train = True,
+                                            download = True,
+                                            transform = data_transforms['train'])
+    trainloader = torch.utils.data.DataLoader(trainset,
+                                              batch_size = BATCH_SIZE,
+                                              shuffle = True,
+                                              num_workers = 2)
+    
+    testset = torchvision.datasets.CIFAR10(root=path,
                                            train = False,
                                            download = True,
                                            transform = data_transforms['val'])
