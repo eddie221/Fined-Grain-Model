@@ -217,6 +217,7 @@ class Energy_attention(nn.Module):
         
     def forward(self, x):
         x_norm = self.instance_norm(x)
+        x_norm = self.relu(x_norm)
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
         x_energy = self.SE(x_energy)
