@@ -56,15 +56,6 @@ class LDW_down(nn.Module):
         
         return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
     
-    # need call filter_constraint every step after optimizer.step() to make sure the weight is in constraint
-# =============================================================================
-#     def filter_constraint(self):
-#         self.low_pass_filter_h.data = self.low_pass_filter_h / torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True)
-#         self.high_pass_filter_h.data = self.high_pass_filter_h - torch.mean(self.high_pass_filter_h, dim = 3, keepdim = True)
-#         self.low_pass_filter_v.data = self.low_pass_filter_v / torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True)
-#         self.high_pass_filter_v.data = self.high_pass_filter_v - torch.mean(self.high_pass_filter_v, dim = 2, keepdim = True)
-# =============================================================================
-    
     def forward(self, x):
         # pad the feature map
         batch, channel, height, width = x.shape
@@ -83,7 +74,7 @@ class LDW_down(nn.Module):
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, self.low_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
         x_h = torch.nn.functional.conv2d(x, self.high_pass_filter_h, groups = x.shape[1], stride = (1, self.stride))
-        #x_first = torch.cat([x_l, x_h], dim = -1)
+
         x_ll = torch.nn.functional.conv2d(x_l, self.low_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         x_hl = torch.nn.functional.conv2d(x_l, self.high_pass_filter_v, groups = x_l.shape[1], stride = (self.stride, 1))
         x_lh = torch.nn.functional.conv2d(x_h, self.low_pass_filter_v, groups = x_h.shape[1], stride = (self.stride, 1))
@@ -91,17 +82,7 @@ class LDW_down(nn.Module):
         del x_l
         del x_h
         
-        #x_l2 = torch.nn.functional.conv2d(x_first, self.low_pass_filter_v, groups = x_first.shape[1], stride = (self.stride, 1))
-        #x_h2 = torch.nn.functional.conv2d(x_first, self.high_pass_filter_v, groups = x_first.shape[1], stride = (self.stride, 1))
-        #x_second = torch.cat([x_l2, x_h2], dim = 2)
-        
         x_all = torch.cat([x_ll, x_hl, x_lh, x_hh], dim = 1)
-# =============================================================================
-#         x_all2 = torch.cat([x_second[:, :, :height // 2, :width // 2],
-#                            x_second[:, :, height // 2:, :width // 2],
-#                            x_second[:, :, :height // 2, width // 2:],
-#                            x_second[:, :, height // 2:, width // 2:]], dim = 1)
-# =============================================================================
         return x_all
     
 class LDW_up(nn.Module):
@@ -236,7 +217,6 @@ class Energy_attention(nn.Module):
         
     def forward(self, x):
         x_norm = self.instance_norm(x)
-        x_norm = self.relu(x_norm)
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
         x_energy = self.SE(x_energy)
