@@ -188,7 +188,7 @@ class Resnet(nn.Module):
         super(Resnet, self).__init__()
         self.name = "resnet_LDW"
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.lifting1 = nn.Sequential(LDW_down(64, 2, 2, pad_mode = "pad0"),
                                       nn.Conv2d(256, 64, 1, bias = False),
                                       Energy_attention(64))
@@ -305,10 +305,10 @@ def resnet101(num_classes = 1000):
     return model
 
 if __name__ == "__main__":
-    model = resnet18(10).to("cuda:0")
+    model = resnet50(10).to("cuda:0")
     a = torch.randn([2, 3, 224, 224]).to("cuda:0")
     print(len(model.LDW_pool))
-    with open('../resnet18_lifting.txt', 'w') as f:
+    with open('../resnet50_lifting.txt', 'w') as f:
         print(model, file = f)
 # =============================================================================
 #     optim = torch.optim.Adam([
