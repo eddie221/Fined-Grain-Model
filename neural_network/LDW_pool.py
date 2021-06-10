@@ -210,6 +210,7 @@ class Energy_attention(nn.Module):
         super(Energy_attention, self).__init__()
         self.instance_norm = nn.InstanceNorm2d(in_cha)
         self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 4),
+                                nn.BatchNorm1d(in_cha // 4),
                                 nn.ReLU(),
                                 nn.Linear(in_cha // 4, in_cha),
                                 nn.Sigmoid())
@@ -219,7 +220,7 @@ class Energy_attention(nn.Module):
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
         x_energy = self.SE(x_energy)
-        x = x * x_energy.unsqueeze(-1).unsqueeze(-1) + x
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
         
         return x
 
