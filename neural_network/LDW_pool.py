@@ -220,7 +220,7 @@ class Energy_attention(nn.Module):
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
         x_energy = self.SE(x_energy)
-        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1) + x
         
         return x
 
