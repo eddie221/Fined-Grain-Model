@@ -37,7 +37,7 @@ class LDW_down(nn.Module):
         #self.filter_constraint()
     
     def __repr__(self):
-        struct = "Lifting({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
+        struct = "LDW_down({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
         return struct
     
     def regular_term_loss(self):
@@ -114,7 +114,7 @@ class LDW_up(nn.Module):
         #self.filter_constraint()
     
     def __repr__(self):
-        struct = "Lifting({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
+        struct = "LDW_up({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
         return struct
     
     def regular_term_loss(self):
@@ -210,19 +210,17 @@ class Energy_attention(nn.Module):
         super(Energy_attention, self).__init__()
         self.instance_norm = nn.InstanceNorm2d(in_cha)
         self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 4),
-                                nn.BatchNorm1d(in_cha // 4),
+                                nn.InstanceNorm1d(1),
                                 nn.ReLU(),
                                 nn.Linear(in_cha // 4, in_cha),
-                                nn.BatchNorm1d(in_cha),
                                 nn.Sigmoid())
         
     def forward(self, x):
         x_norm = self.instance_norm(x)
+        x_norm = x_norm.unsqueeze(1)
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
-        
         x_energy = self.SE(x_energy)
-        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
-        
+        x = x * x_energy.squeeze(1).unsqueeze(-1).unsqueeze(-1)
         return x
 
 def lifting_down(img, pad_mode = 'discard', pad_place = [0, 1, 0, 1]):
@@ -272,13 +270,16 @@ if __name__ == "__main__":
     x_ll, x_hl, x_lh, x_hh = lifting_down(image)
     # test 2
     #image = torch.randn([2, 4, 8, 8]).cuda()
-    pool_down = Lifting_down(1, kernel_size = 2).cuda()
-    pool_up = Lifting_up(4, kernel_size = 2).cuda()
+    pool_down = LDW_down(1, kernel_size = 2).cuda()
+    pool_up = LDW_up(4, kernel_size = 2).cuda()
     output = pool_down(image)
     print("output : ", output)
     image = pool_up(output)
     print("image : ", image)
     print(pool_down.regular_term_loss())
+    EA = Energy_attention(8)
+    a = torch.randn([1, 8, 5, 5])
+    EA(a)
 # =============================================================================
 #     ll, hl, lh, hh = lifting_down(image, pad_mode = 'discard')
 #     lifting_up(ll, hl, lh, hh)
