@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -36,7 +36,7 @@ use_gpu = torch.cuda.is_available()
 optimizer_select = ''
 loss_function_select = ''
 model_name = ''
-data_name = 'cifar100'
+data_name = 'cifar10'
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
@@ -178,7 +178,7 @@ def training(job):
     #with torch.autograd.set_detect_anomaly(True):
     #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
     #kfold_image_data, all_image_datasets = load_data_cifar("./data")
-    kfold_image_data, all_image_datasets = load_data_cifar100("./data")
+    kfold_image_data, all_image_datasets = load_data_cifar10("./data")
     #kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
     ACCMeters = []
     LOSSMeters = []

@@ -213,6 +213,7 @@ class Energy_attention(nn.Module):
                                 nn.BatchNorm1d(in_cha // 4),
                                 nn.ReLU(),
                                 nn.Linear(in_cha // 4, in_cha),
+                                nn.BatchNorm1d(in_cha),
                                 nn.Sigmoid())
         
     def forward(self, x):
@@ -220,7 +221,7 @@ class Energy_attention(nn.Module):
         x_energy = torch.mean(torch.mean(torch.pow(x_norm, 2), dim = -1), dim = -1)
         
         x_energy = self.SE(x_energy)
-        x = x * x_energy.unsqueeze(-1).unsqueeze(-1) + x
+        x = x * x_energy.unsqueeze(-1).unsqueeze(-1)
         
         return x
 
