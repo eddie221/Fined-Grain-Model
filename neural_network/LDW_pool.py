@@ -210,10 +210,10 @@ class Energy_attention(nn.Module):
         super(Energy_attention, self).__init__()
         self.instance_norm = nn.InstanceNorm2d(in_cha)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 8),
-                                nn.BatchNorm1d(in_cha // 8),
+        self.SE = nn.Sequential(nn.Linear(in_cha, in_cha // 2),
+                                nn.BatchNorm1d(in_cha // 2),
                                 nn.ReLU(inplace = True),
-                                nn.Linear(in_cha // 8, in_cha),
+                                nn.Linear(in_cha // 2, in_cha),
                                 nn.Sigmoid())
         
     def forward(self, x):
