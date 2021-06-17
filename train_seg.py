@@ -24,7 +24,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 use_gpu = torch.cuda.is_available()
 
@@ -64,8 +64,6 @@ def create_nn_model():
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
     
     print(model)
-    if 'LDW' in model_name:
-        print("LDW-pooling : {}".format(len(model.lifting_pool)))
     return model
 
 def create_opt_loss(model):
@@ -205,18 +203,16 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #miou = mIoU(output_1.cpu().data, label, NUM_CLASS)
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = 0
-    for j in range(len(model.lifting_pool)):
-        filter_constraint += model.lifting_pool[j].regular_term_loss()
+    filter_constraint = model.LDW_ds.regular_term_loss() + model.LDW_us.regular_term_loss() 
     
-    loss = filter_constraint / len(model.lifting_pool) + cls_loss
+    loss = filter_constraint + cls_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item(), output_1.detach().cpu().data
+    return loss.item(), output_1.detach().cpu().data, cls_loss.detach().cpu().data, filter_constraint.detach().cpu().data
 
 #training
 def training(job):
@@ -262,6 +258,7 @@ def training(job):
                 cls_rate = AverageMeter(False)
                 inter_record = AverageMeter(False)
                 union_record = AverageMeter(False)
+                con_rate = AverageMeter(False)
                 #print(inter_record.avg / union_record.avg)
                 
                 if phase == 'train':
@@ -274,10 +271,12 @@ def training(job):
                         all_image_datasets.transform = data_transforms['val']
                 step = 1
                 for data, label in tqdm.tqdm(image_data[phase]):
-                    loss, output = train_step(model, data, label, loss_func, optimizers, phase)
+                    loss, output, cls_loss, con_loss = train_step(model, data, label, loss_func, optimizers, phase)
                     inter, union = miou_class.get_iou(output, label)
                     inter_record.update(inter)
                     union_record.update(union)
+                    cls_rate.update(cls_loss, data.shape[0])
+                    con_rate.update(con_loss, data.shape[0])
                     loss_t.update(loss, data.size(0))
                     step += 1
                     if CON_MATRIX:
@@ -303,6 +302,8 @@ def training(job):
                 print(inter_record.sum / (union_record.sum + 1e-10) * 100)
                 #print("{} set cls : {:.6f}".format(phase, cls_rate_1.avg))
                 #print("{} set min loss : {:.6f}".format(phase, min_loss[phase].avg))
+                print("{} set cls : {:.6f}".format(phase, cls_rate.avg))
+                print("{} set constraint : {:.6f}".format(phase, con_rate.avg))
                 print("{} set mIoU : {:.6f}".format(phase, (inter_record.sum / (union_record.sum + 1e-10)).mean() * 100))
                 print("{} last update : {:.6f}".format(phase, (max_miou[phase] - last_miou[phase])))
                 print("{} set max mIoU : {:.6f}".format(phase, max_miou[phase]))

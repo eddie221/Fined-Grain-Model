@@ -8,7 +8,7 @@ Created on Wed Jun  2 20:48:58 2021
 
 import torch
 import torch.nn as nn
-from neural_network.lifting_pool import Lifting_down, Lifting_up, Energy_attention
+from neural_network.LDW_pool import LDW_down, LDW_up, Energy_attention
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
@@ -77,6 +77,48 @@ class BasicBlock(nn.Module):
         out = self.relu(out)
 
         return out
+    
+class BasicBlock_LDW(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(BasicBlock_LDW, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        if groups != 1 or base_width != 64:
+            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(inplanes, planes // 4)
+        
+        self.conv2 = conv3x3(planes // 4, planes // 4, stride)
+        self.bn2 = norm_layer(planes // 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv3 = conv3x3(planes // 4, planes // 4)
+        self.bn3 = norm_layer(planes // 4)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        x = self.conv1(x)
+        identity = x
+        out = self.conv2(x)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+        
+        if self.downsample is not None:
+            identity = self.downsample(x)
+            
+        out = out.repeat(1, 4, 1, 1)
+        out += identity
+        out = self.relu(out)
+
+        return out
 
 
 class Bottleneck(nn.Module):
@@ -141,8 +183,8 @@ class Bottleneck_LDW(nn.Module):
         self.bn1 = norm_layer(width // 4)
         self.conv2 = conv3x3(width // 4, width // 4, stride, groups, dilation)
         self.bn2 = norm_layer(width // 4)
-        self.conv3 = conv1x1(width // 4, planes * self.expansion // 4)
-        self.bn3 = norm_layer(planes * self.expansion // 4)
+        self.conv3 = conv1x1(width // 4, planes // 4)
+        self.bn3 = norm_layer(planes // 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
@@ -162,7 +204,7 @@ class Bottleneck_LDW(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(identity)
         
-        #out = out.repeat(1, 4, 1, 1)
+        out = out.repeat(1, 4, 1, 1)
         out += identity
         out = self.relu(out)
 
@@ -192,22 +234,21 @@ class Up(nn.Module):
 
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
-
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
             self.conv1x1 = None
         else:
-            self.up = nn.Sequential(nn.Conv2d(in_channels, in_channels, 1, bias = 1),
-                                    Lifting_up(in_channels, 2))
+            self.up = nn.Sequential(nn.Conv2d(in_channels, in_channels, 1, bias = 1))
             self.conv1x1 = nn.Conv2d(in_channels // 2, in_channels // 4, 1, bias = False)
             self.conv = DoubleConv(in_channels // 2, out_channels)
 
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, ldw_us):
         x1 = self.up(x1)
         if self.conv1x1 is not None:
+            x1 = ldw_us(x1)
             x2 = self.conv1x1(x2)
         # input is CHW
         diffY = x2.size()[2] - x1.size()[2]
@@ -248,6 +289,10 @@ class ResNet(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        
+        self.LDW_ds = LDW_down(2, 2, pad_mode = 'pad0')
+        self.LDW_us = LDW_up(2, 2, pad_mode = 'pad0')
+        
         self.layer1 = self._make_layer(block, Bottleneck_LDW, 64, layers[0])
         self.layer2 = self._make_layer(block, Bottleneck_LDW, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, Bottleneck_LDW, 256, layers[2], stride=2)
@@ -277,9 +322,9 @@ class ResNet(nn.Module):
                     
         self.lifting_pool = []
         for m in self.modules():
-            if isinstance(m, Lifting_down):
+            if isinstance(m, LDW_down):
                 self.lifting_pool.append(m)
-            if isinstance(m, Lifting_up):
+            if isinstance(m, LDW_up):
                 self.lifting_pool.append(m)
 
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
@@ -295,7 +340,7 @@ class ResNet(nn.Module):
             else:
                 downsample = nn.Sequential(
                     #nn.Conv2d(self.inplanes, planes * block.expansion // 4, kernel_size=1, stride=1, bias=False),
-                    Lifting_down(planes * block.expansion // 4, 2, stride = 2, pad_mode = "pad0"),
+                    self.LDW_ds,
                     Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
@@ -319,10 +364,10 @@ class ResNet(nn.Module):
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
 
-        x = self.up1(x4, x3)
-        x = self.up2(x, x2)
-        x = self.up3(x, x1)
-        x = self.up4(x, x_head)
+        x = self.up1(x4, x3, self.LDW_us)
+        x = self.up2(x, x2, self.LDW_us)
+        x = self.up3(x, x1, self.LDW_us)
+        x = self.up4(x, x_head, self.LDW_us)
         x = torch.nn.functional.interpolate(x, size = H, mode = 'bilinear', align_corners = True)
         return x
 
@@ -347,16 +392,6 @@ def resnet18(pretrained=False, progress=True, **kwargs):
                    **kwargs)
 
 
-def resnet34(pretrained=False, progress=True, **kwargs):
-    r"""ResNet-34 model from
-    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _resnet('resnet34', BasicBlock, [3, 4, 6, 3], pretrained, progress,
-                   **kwargs)
 
 
 def resnet50(pretrained=False, progress=True, **kwargs):
@@ -383,77 +418,10 @@ def resnet101(pretrained=False, progress=True, **kwargs):
                    **kwargs)
 
 
-def resnet152(pretrained=False, progress=True, **kwargs):
-    r"""ResNet-152 model from
-    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _resnet('resnet152', Bottleneck, [3, 8, 36, 3], pretrained, progress,
-                   **kwargs)
-
-
-def resnext50_32x4d(pretrained=False, progress=True, **kwargs):
-    r"""ResNeXt-50 32x4d model from
-    `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    kwargs['groups'] = 32
-    kwargs['width_per_group'] = 4
-    return _resnet('resnext50_32x4d', Bottleneck, [3, 4, 6, 3],
-                   pretrained, progress, **kwargs)
-
-
-def resnext101_32x8d(pretrained=False, progress=True, **kwargs):
-    r"""ResNeXt-101 32x8d model from
-    `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    kwargs['groups'] = 32
-    kwargs['width_per_group'] = 8
-    return _resnet('resnext101_32x8d', Bottleneck, [3, 4, 23, 3],
-                   pretrained, progress, **kwargs)
-
-
-def wide_resnet50_2(pretrained=False, progress=True, **kwargs):
-    r"""Wide ResNet-50-2 model from
-    `"Wide Residual Networks" <https://arxiv.org/pdf/1605.07146.pdf>`_
-
-    The model is the same as ResNet except for the bottleneck number of channels
-    which is twice larger in every block. The number of channels in outer 1x1
-    convolutions is the same, e.g. last block in ResNet-50 has 2048-512-2048
-    channels, and in Wide ResNet-50-2 has 2048-1024-2048.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    kwargs['width_per_group'] = 64 * 2
-    return _resnet('wide_resnet50_2', Bottleneck, [3, 4, 6, 3],
-                   pretrained, progress, **kwargs)
-
-
-def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
-    r"""Wide ResNet-101-2 model from
-    `"Wide Residual Networks" <https://arxiv.org/pdf/1605.07146.pdf>`_
-
-    The model is the same as ResNet except for the bottleneck number of channels
-    which is twice larger in every block. The number of channels in outer 1x1
-    convolutions is the same, e.g. last block in ResNet-50 has 2048-512-2048
-    channels, and in Wide ResNet-50-2 has 2048-1024-2048.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    kwargs['width_per_group'] = 64 * 2
-    return _resnet('wide_resnet101_2', Bottleneck, [3, 4, 23, 3],
-                   pretrained, progress, **kwargs)
+if __name__ == "__main__":
+    a = torch.randn([1, 3, 224, 224]).cuda()
+    model = resnet50(num_classes=3)
+    model.eval()
+    model.cuda()
+    output = model(a)
+    print(output.shape)
