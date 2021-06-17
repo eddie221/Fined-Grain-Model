@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -66,8 +66,7 @@ def create_nn_model():
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    if 'LDW' in model_name:
-        print("LDW-pooling : {}".format(len(model.LDW_pool)))
+    print(model.LDW_Pooling)
     return model
 
 def create_opt_loss(model):
@@ -156,18 +155,16 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = 0
-    for j in range(len(model.LDW_pool)):
-        filter_constraint += model.LDW_pool[j].regular_term_loss()
+    filter_constraint = model.LDW_Pooling.regular_term_loss()
     
-    loss = filter_constraint / len(model.LDW_pool) + cls_loss
+    loss = filter_constraint + cls_loss
     
     if phase == 'train':
         loss.backward()
         for optimizer in optimizers:
             optimizer.step()
             
-    return loss.item(), predicted.detach().cpu(), predicted5.detach().cpu(), filter_constraint.detach().cpu() / len(model.LDW_pool), cls_loss.detach().cpu()
+    return loss.item(), predicted.detach().cpu(), predicted5.detach().cpu(), filter_constraint.detach().cpu(), cls_loss.detach().cpu()
 
 #training
 def training(job):

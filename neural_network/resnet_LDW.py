@@ -189,12 +189,13 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.lifting1 = nn.Sequential(LDW_down(64, 2, 2, pad_mode = "pad0"),
+        self.LDW_Pooling = LDW_down(2, 2, pad_mode = "pad0")
+        self.lifting1 = nn.Sequential(self.LDW_Pooling,
                                       nn.Conv2d(256, 64, 1, bias = False),
                                       Energy_attention(64))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = nn.Sequential(LDW_down(64, 2, 2, pad_mode = "pad0"),
+        self.lifting2 = nn.Sequential(self.LDW_Pooling,
                                       nn.Conv2d(256, 64, 1, bias = False),
                                       Energy_attention(64))
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -208,11 +209,6 @@ class Resnet(nn.Module):
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         #self.fc = nn.Linear(2048, num_classes)
         
-        self.LDW_pool = []
-        for m in self.modules():
-            if isinstance(m, LDW_down):
-                self.LDW_pool.append(m)
-                
         
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
         downsample = None
@@ -227,7 +223,7 @@ class Resnet(nn.Module):
             else:
                 downsample = nn.Sequential(
                     #nn.Conv2d(self.inplanes, planes * block.expansion // 4, kernel_size=1, stride=1, bias=False),
-                    LDW_down(planes * block.expansion // 4, 2, stride = 2, pad_mode = "pad0"),
+                    self.LDW_Pooling,
                     Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
@@ -307,7 +303,6 @@ def resnet101(num_classes = 1000):
 if __name__ == "__main__":
     model = resnet50(10).to("cuda:0")
     a = torch.randn([2, 3, 224, 224]).to("cuda:0")
-    print(len(model.LDW_pool))
     with open('../resnet50_lifting.txt', 'w') as f:
         print(model, file = f)
 # =============================================================================
@@ -326,11 +321,13 @@ if __name__ == "__main__":
     for i in range(5):
         output = model(a)
         optim.zero_grad()
-        loss = loss_f(output, label)
-        for j in range(len(model.LDW_pool)):
-            loss += 1e-4 * model.LDW_pool[j].regular_term_loss().squeeze(0)
+        loss = loss_f(output, label) + model.LDW_Pooling.regular_term_loss()
         loss.backward()
         print(loss)
         optim.step()
+        
+    model.eval()
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print(pytorch_total_params / 1000 / 1000)
         
     #model.lifting_pool[0].filter_constraint()
