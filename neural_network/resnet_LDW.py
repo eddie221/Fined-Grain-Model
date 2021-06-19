@@ -195,9 +195,11 @@ class Resnet(nn.Module):
                                       Energy_attention(64))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.lifting2 = nn.Sequential(self.LDW_Pooling,
-                                      nn.Conv2d(256, 64, 1, bias = False),
-                                      Energy_attention(64))
+# =============================================================================
+#         self.lifting2 = nn.Sequential(self.LDW_Pooling,
+#                                       nn.Conv2d(256, 64, 1, bias = False),
+#                                       Energy_attention(64))
+# =============================================================================
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(block, LDW_block, 64, layers[0])
@@ -266,7 +268,7 @@ class Resnet(nn.Module):
         x = self.lifting1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.lifting2(x)
+        x = self.lifting1(x)
         #x = self.maxpool(x)
         # 64, 112, 112
         
