@@ -154,7 +154,7 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -195,6 +195,33 @@ class ResNet(nn.Module):
                                 base_width=self.base_width, dilation=self.dilation,
                                 norm_layer=norm_layer))
 
+        return nn.Sequential(*layers)
+    
+    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+        """
+        Construct fully connected layer
+        - fc_dims (list or tuple): dimensions of fc layers, if None,
+                                   no fc layers are constructed
+        - input_dim (int): input dimension
+        - dropout_p (float): dropout probability, if None, dropout is unused
+        """
+        if fc_dims is None:
+            self.feature_dim = input_dim
+            return None
+        
+        assert isinstance(fc_dims, (list, tuple)), "fc_dims must be either list or tuple, but got {}".format(type(fc_dims))
+        
+        layers = []
+        for dim in fc_dims:
+            layers.append(nn.Linear(input_dim, dim))
+            layers.append(nn.BatchNorm1d(dim))
+            layers.append(nn.ReLU(inplace=True))
+            if dropout_p is not None:
+                layers.append(nn.Dropout(p=dropout_p))
+            input_dim = dim
+        
+        self.feature_dim = fc_dims[-1]
+        
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x):

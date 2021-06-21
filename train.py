@@ -60,13 +60,12 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_LDW'
-    model = resnet_LDW.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_model'
+    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = vgg_LDW.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
-    print(model.LDW_Pooling)
     return model
 
 def create_opt_loss(model):
@@ -155,9 +154,9 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = model.LDW_Pooling.regular_term_loss()
-    
-    loss = filter_constraint + cls_loss
+    #filter_constraint = model.LDW_Pooling.regular_term_loss()
+    filter_constraint = torch.tensor(0)
+    loss = cls_loss
     
     if phase == 'train':
         loss.backward()
