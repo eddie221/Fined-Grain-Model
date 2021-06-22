@@ -62,22 +62,26 @@ class LDW_down(nn.Module):
                                            self.low_pass_filter_v.repeat(channel // 4, 1, 1, 1),
                                            groups = channel // 4,
                                            stride = (1, 1),
-                                           dilation = (x.shape[2], 1))
+                                           dilation = (x.shape[2], 1),
+                                           padding = (self.kernel_size // 2))
         x_l_o = torch.nn.functional.conv2d(torch.cat([x[:, 0:channel // 4, :, :], x[:, channel // 4 : channel // 2, :, :]], dim = 2),
                                            self.high_pass_filter_v.repeat(channel // 4, 1, 1, 1), 
                                            groups = channel // 4, 
                                            stride = (1, 1),
-                                           dilation = (x.shape[2], 1))
+                                           dilation = (x.shape[2], 1),
+                                           padding = (self.kernel_size // 2))
         x_h_e = torch.nn.functional.conv2d(torch.cat([x[:, channel // 2 : channel * 3 // 4, :, :], x[:, channel * 3 // 4 :, :, :]], dim = 2), 
                                            self.low_pass_filter_v.repeat(channel // 4, 1, 1, 1), 
                                            groups = channel // 4, 
                                            stride = (1, 1),
-                                           dilation = (x.shape[2], 1))
+                                           dilation = (x.shape[2], 1),
+                                           padding = (self.kernel_size // 2))
         x_h_o = torch.nn.functional.conv2d(torch.cat([x[:, channel // 2 : channel * 3 // 4, :, :], x[:, channel * 3 // 4 :, :, :]], dim = 2), 
                                            self.high_pass_filter_v.repeat(channel // 4, 1, 1, 1),
                                            groups = channel // 4,
                                            stride = (1, 1),
-                                           dilation = (x.shape[2], 1))
+                                           dilation = (x.shape[2], 1),
+                                           padding = (self.kernel_size // 2))
         
         low_idx_old = torch.arange(0, x_l_o.shape[2]).to(x.get_device())
         low_idx_old = low_idx_old.repeat_interleave(2)
@@ -95,12 +99,14 @@ class LDW_down(nn.Module):
                                          self.low_pass_filter_h.repeat(x_l.shape[1], 1, 1, 1),
                                          groups = channel // 4,
                                          stride = (1, 1),
-                                         dilation = (1, x.shape[2]))
+                                         dilation = (1, x.shape[2]),
+                                         padding = (self.kernel_size // 2))
         x_o = torch.nn.functional.conv2d(torch.cat([x_l, x_h], dim = 3),
                                          self.high_pass_filter_h.repeat(x_l.shape[1], 1, 1, 1), 
                                          groups = channel // 4,
                                          stride = (1, 1),
-                                         dilation = (1, x.shape[2]))
+                                         dilation = (1, x.shape[2]),
+                                         padding = (self.kernel_size // 2))
         idx_old = torch.arange(0, x.shape[3]).to(x.get_device())
         idx_old = idx_old.repeat_interleave(2)
         idx_old[1::2] += x_h_o.shape[2]

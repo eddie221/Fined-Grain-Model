@@ -189,7 +189,7 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_Pooling = LDW_down(2, 2, pad_mode = "pad0")
+        self.LDW_Pooling = LDW_down(3, 2)
         self.lifting1 = nn.Sequential(self.LDW_Pooling,
                                       nn.Conv2d(256, 64, 1, bias = False),
                                       Energy_attention(64))

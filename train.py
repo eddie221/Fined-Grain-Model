@@ -60,8 +60,8 @@ def get_lr(optimizer):
 
 def create_nn_model():
     global model_name
-    model_name = 'resnet_model'
-    model = resnet.resnet50(num_classes = NUM_CLASS).to(DEVICE)
+    model_name = 'resnet_LDW'
+    model = resnet_LDW.resnet50(num_classes = NUM_CLASS).to(DEVICE)
     #model = vgg_LDW.vgg13_bn(num_classes = NUM_CLASS).to(DEVICE)
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
@@ -79,7 +79,7 @@ def create_opt_loss(model):
 #                                   lr = LR, weight_decay = 1e-4)
 # =============================================================================
                 ]
-    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[100, 200, 300], gamma=0.1),
+    set_lr_secheduler = [torch.optim.lr_scheduler.MultiStepLR(optimizer[0], milestones=[75, 150, 225, 300, 375], gamma=0.1),
                         ]
     
     loss_func = [torch.nn.CrossEntropyLoss(),
@@ -154,9 +154,8 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    #filter_constraint = model.LDW_Pooling.regular_term_loss()
-    filter_constraint = torch.tensor(0)
-    loss = cls_loss
+    filter_constraint = model.LDW_Pooling.regular_term_loss()
+    loss = cls_loss + filter_constraint
     
     if phase == 'train':
         loss.backward()
@@ -174,7 +173,10 @@ def training(job):
     #with torch.autograd.set_detect_anomaly(True):
     #kfold_image_data, dataset_sizes, all_image_datasets = load_data()
     #kfold_image_data, all_image_datasets = load_data_cifar("./data")
-    kfold_image_data, all_image_datasets = load_data_cifar10("./data")
+    if data_name == 'cifar100':
+        kfold_image_data, all_image_datasets = load_data_cifar100("./data")
+    elif data_name == 'cifar10':
+        kfold_image_data, all_image_datasets = load_data_cifar10("./data")
     #kfold_image_data, all_image_datasets = load_ImageNet("./imagenet")
     ACCMeters = []
     LOSSMeters = []
