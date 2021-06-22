@@ -189,10 +189,9 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_Pooling = LDW_down(3, 2)
+        self.LDW_Pooling = LDW_down(2, 2)
         self.lifting1 = nn.Sequential(self.LDW_Pooling,
-                                      nn.Conv2d(256, 64, 1, bias = False),
-                                      Energy_attention(64))
+                                      nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
 # =============================================================================
@@ -226,7 +225,6 @@ class Resnet(nn.Module):
                 downsample = nn.Sequential(
                     #nn.Conv2d(self.inplanes, planes * block.expansion // 4, kernel_size=1, stride=1, bias=False),
                     self.LDW_Pooling,
-                    Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
                 layers.append(LDW_block(self.inplanes, planes * block.expansion, stride, downsample))
