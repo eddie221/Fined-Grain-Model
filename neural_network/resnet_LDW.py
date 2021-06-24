@@ -191,14 +191,10 @@ class Resnet(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.LDW_Pooling = LDW_down(2, 2)
         self.lifting1 = nn.Sequential(self.LDW_Pooling,
+                                      Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-# =============================================================================
-#         self.lifting2 = nn.Sequential(self.LDW_Pooling,
-#                                       nn.Conv2d(256, 64, 1, bias = False),
-#                                       Energy_attention(64))
-# =============================================================================
         #self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         self.layer1 = self._make_layer(block, LDW_block, 64, layers[0])
@@ -208,7 +204,6 @@ class Resnet(nn.Module):
         
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
-        #self.fc = nn.Linear(2048, num_classes)
         
         
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
@@ -223,8 +218,8 @@ class Resnet(nn.Module):
                 layers.append(block(self.inplanes, planes, stride, downsample))
             else:
                 downsample = nn.Sequential(
-                    #nn.Conv2d(self.inplanes, planes * block.expansion // 4, kernel_size=1, stride=1, bias=False),
                     self.LDW_Pooling,
+                    Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
                 layers.append(LDW_block(self.inplanes, planes * block.expansion, stride, downsample))
