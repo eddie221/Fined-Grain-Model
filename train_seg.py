@@ -203,7 +203,7 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     #miou = mIoU(output_1.cpu().data, label, NUM_CLASS)
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = model.LDW_ds.regular_term_loss() + model.LDW_us.regular_term_loss() 
+    filter_constraint = model.LDW_ds.regular_term_loss()
     
     loss = filter_constraint + cls_loss
     

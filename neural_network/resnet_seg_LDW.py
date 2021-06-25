@@ -10,11 +10,6 @@ import torch
 import torch.nn as nn
 from neural_network.LDW_pool import LDW_down, LDW_up, Energy_attention
 
-__all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
-           'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
-           'wide_resnet50_2', 'wide_resnet101_2']
-
-
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
     'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
@@ -203,7 +198,7 @@ class Bottleneck_LDW(nn.Module):
         out = self.bn3(out)
         if self.downsample is not None:
             identity = self.downsample(identity)
-        
+            
         out = out.repeat(1, 4, 1, 1)
         out += identity
         out = self.relu(out)
@@ -240,7 +235,7 @@ class Up(nn.Module):
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
             self.conv1x1 = None
         else:
-            self.up = nn.Sequential(nn.Conv2d(in_channels, in_channels, 1, bias = 1))
+            self.up = nn.Conv2d(in_channels, in_channels, 1, bias = 1)
             self.conv1x1 = nn.Conv2d(in_channels // 2, in_channels // 4, 1, bias = False)
             self.conv = DoubleConv(in_channels // 2, out_channels)
 
@@ -290,8 +285,7 @@ class ResNet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        self.LDW_ds = LDW_down(2, 2, pad_mode = 'pad0')
-        self.LDW_us = LDW_up(2, 2, pad_mode = 'pad0')
+        self.LDW_ds = LDW_down(2, 2)
         
         self.layer1 = self._make_layer(block, Bottleneck_LDW, 64, layers[0])
         self.layer2 = self._make_layer(block, Bottleneck_LDW, 128, layers[1], stride=2)
@@ -363,11 +357,10 @@ class ResNet(nn.Module):
         x2 = self.layer2(x1)
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
-
-        x = self.up1(x4, x3, self.LDW_us)
-        x = self.up2(x, x2, self.LDW_us)
-        x = self.up3(x, x1, self.LDW_us)
-        x = self.up4(x, x_head, self.LDW_us)
+        x = self.up1(x4, x3, self.LDW_ds.up)
+        x = self.up2(x, x2, self.LDW_ds.up)
+        x = self.up3(x, x1, self.LDW_ds.up)
+        x = self.up4(x, x_head, self.LDW_ds.up)
         x = torch.nn.functional.interpolate(x, size = H, mode = 'bilinear', align_corners = True)
         return x
 
@@ -419,9 +412,9 @@ def resnet101(pretrained=False, progress=True, **kwargs):
 
 
 if __name__ == "__main__":
-    a = torch.randn([1, 3, 224, 224]).cuda()
+    a = torch.randn([1, 3, 224, 224])
     model = resnet50(num_classes=3)
     model.eval()
-    model.cuda()
+    model
     output = model(a)
     print(output.shape)

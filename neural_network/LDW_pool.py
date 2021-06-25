@@ -55,70 +55,79 @@ class LDW_down(nn.Module):
         
         return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
     
-    def up(self, x):
-        batch, channel, height, width = x.shape
-        # calculate the lifting weight different weight
-        x_l_e = torch.nn.functional.conv2d(torch.cat([x[:, 0:channel // 4, :, :], x[:, channel // 4 : channel // 2, :, :]], dim = 2),
-                                           self.low_pass_filter_v.repeat(channel // 4, 1, 1, 1),
-                                           groups = channel // 4,
-                                           stride = (1, 1),
-                                           dilation = (x.shape[2], 1),
-                                           padding = (self.kernel_size // 2))
-        x_l_o = torch.nn.functional.conv2d(torch.cat([x[:, 0:channel // 4, :, :], x[:, channel // 4 : channel // 2, :, :]], dim = 2),
-                                           self.high_pass_filter_v.repeat(channel // 4, 1, 1, 1), 
-                                           groups = channel // 4, 
-                                           stride = (1, 1),
-                                           dilation = (x.shape[2], 1),
-                                           padding = (self.kernel_size // 2))
-        x_h_e = torch.nn.functional.conv2d(torch.cat([x[:, channel // 2 : channel * 3 // 4, :, :], x[:, channel * 3 // 4 :, :, :]], dim = 2), 
-                                           self.low_pass_filter_v.repeat(channel // 4, 1, 1, 1), 
-                                           groups = channel // 4, 
-                                           stride = (1, 1),
-                                           dilation = (x.shape[2], 1),
-                                           padding = (self.kernel_size // 2))
-        x_h_o = torch.nn.functional.conv2d(torch.cat([x[:, channel // 2 : channel * 3 // 4, :, :], x[:, channel * 3 // 4 :, :, :]], dim = 2), 
-                                           self.high_pass_filter_v.repeat(channel // 4, 1, 1, 1),
-                                           groups = channel // 4,
-                                           stride = (1, 1),
-                                           dilation = (x.shape[2], 1),
-                                           padding = (self.kernel_size // 2))
-        
-        low_idx_old = torch.arange(0, x_l_o.shape[2]).to(x.get_device())
-        low_idx_old = low_idx_old.repeat_interleave(2)
-        low_idx_old[1::2] += x_l_o.shape[2]
-        x_l = torch.cat([x_l_e, x_l_o], dim = 2)
-        x_l = x_l[:, :, low_idx_old, :]
-        
-        high_idx_old = torch.arange(0, x_h_o.shape[2]).to(x.get_device())
-        high_idx_old = high_idx_old.repeat_interleave(2)
-        high_idx_old[1::2] += x_h_o.shape[2]
-        x_h = torch.cat([x_h_e, x_h_o], dim = 2)
-        x_h = x_h[:, :, high_idx_old, :]
-        
-        x_e = torch.nn.functional.conv2d(torch.cat([x_l, x_h], dim = 3),
-                                         self.low_pass_filter_h.repeat(x_l.shape[1], 1, 1, 1),
-                                         groups = channel // 4,
-                                         stride = (1, 1),
-                                         dilation = (1, x.shape[2]),
-                                         padding = (self.kernel_size // 2))
-        x_o = torch.nn.functional.conv2d(torch.cat([x_l, x_h], dim = 3),
-                                         self.high_pass_filter_h.repeat(x_l.shape[1], 1, 1, 1), 
-                                         groups = channel // 4,
-                                         stride = (1, 1),
-                                         dilation = (1, x.shape[2]),
-                                         padding = (self.kernel_size // 2))
-        idx_old = torch.arange(0, x.shape[3]).to(x.get_device())
+    def switch_data(self, x, y, dim):
+        if x.get_device() == -1:
+            device = "cpu"
+        else:
+            device = x.get_device()
+        combine = torch.cat([x, y], dim = dim)
+        idx_old = torch.arange(0, x.shape[dim]).to(device)
         idx_old = idx_old.repeat_interleave(2)
-        idx_old[1::2] += x_h_o.shape[2]
-
-        recover_x = torch.cat([x_e, x_o], dim = 3)
-        recover_x = recover_x[:, :, :, idx_old]
+        idx_old[1::2] += x.shape[dim]
+        if dim == 2:
+            combine = combine[:, :, idx_old, :]
+        elif dim == 3:
+            combine = combine[:, :, :, idx_old]
+        return combine
+    
+    def up(self, x):
+        if x.get_device() == -1:
+            device = "cpu"
+        else:
+            device = x.get_device()
+        # pad the feature map
+        batch, channel, height, width = x.shape
+        
+        # reconstruct ll + hl = l
+        x_l_combine = self.switch_data(x[:, 0:channel // 4, :, :], x[:, channel // 4 : channel // 2, :, :], 2)
+        
+        x_l_e = torch.nn.functional.conv2d(x_l_combine,
+                                         self.low_pass_filter_v.repeat(x_l_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1),
+                                         padding = [self.kernel_size // 2 if self.kernel_size != 2 else 0, 0])
+        x_l_o = torch.nn.functional.conv2d(x_l_combine,
+                                         self.high_pass_filter_v.repeat(x_l_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1),
+                                         padding = [self.kernel_size // 2 if self.kernel_size != 2 else 0, 0])
+        x_l = self.switch_data(x_l_e, x_l_o, 2)
+        
+        # reconstruct lh + hh = h
+        x_h_combine = self.switch_data(x[:, channel // 2 : channel // 4 * 3, :, :], x[:, channel // 4 * 3 : , :, :], 2)
+        
+        x_h_e = torch.nn.functional.conv2d(x_h_combine,
+                                         self.low_pass_filter_v.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1),
+                                         padding = [self.kernel_size // 2 if self.kernel_size != 2 else 0, 0])
+        x_h_o = torch.nn.functional.conv2d(x_h_combine,
+                                         self.high_pass_filter_v.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1),
+                                         padding = [self.kernel_size // 2 if self.kernel_size != 2 else 0, 0])
+        x_h = self.switch_data(x_h_e, x_h_o, 2)
+        
+        # reconstruct l + h = x
+        x_combine = self.switch_data(x_l, x_h, 3)
+        
+        x_e = torch.nn.functional.conv2d(x_combine,
+                                         self.low_pass_filter_h.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (1, 2),
+                                         padding = [0, self.kernel_size // 2 if self.kernel_size != 2 else 0])
+        x_o = torch.nn.functional.conv2d(x_combine,
+                                         self.high_pass_filter_h.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (1, 2),
+                                         padding = [0, self.kernel_size // 2 if self.kernel_size != 2 else 0])
+        recover_x = self.switch_data(x_e, x_o, 3)
         return recover_x
     
     def forward(self, x):
         # pad the feature map
         batch, channel, height, width = x.shape
-        x = torch.nn.functional.pad(x, pad = [self.kernel_size // 2, self.kernel_size // 2, self.kernel_size // 2, self.kernel_size // 2], mode = 'constant', value = 0)
+        x = torch.nn.functional.pad(x, pad = [self.kernel_size // 2 if self.kernel_size != 2 else 0, self.kernel_size // 2 if self.kernel_size != 2 else 0, self.kernel_size // 2 if self.kernel_size != 2 else 0, self.kernel_size // 2 if self.kernel_size != 2 else 0], mode = 'constant', value = 0)
             
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, 
@@ -190,21 +199,6 @@ class LDW_up(nn.Module):
         constraint3 = torch.mean(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
         
         return (constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
-    
-    def switch_data(self, x, y, dim):
-        if x.get_device() == -1:
-            device = "cpu"
-        else:
-            device = x.get_device()
-        combine = torch.cat([x, y], dim = dim)
-        idx_old = torch.arange(0, x.shape[dim]).to(device)
-        idx_old = idx_old.repeat_interleave(2)
-        idx_old[1::2] += x.shape[dim]
-        if dim == 2:
-            combine = combine[:, :, idx_old, :]
-        elif dim == 3:
-            combine = combine[:, :, :, idx_old]
-        return combine
     
     def forward(self, x):
         if x.get_device() == -1:
@@ -325,16 +319,15 @@ if __name__ == "__main__":
 #                       [[18],[20], [22], [24]]]], dtype = torch.float)
 #     image = image.reshape(1, 1, 4, 4).cuda()
 # =============================================================================
-    image = torch.randn(1, 16, 14, 14).cuda()
+    image = torch.randn(1, 16, 56, 56).cuda()
     x_ll, x_hl, x_lh, x_hh = lifting_down(image)
     # test 2
     #image = torch.randn([2, 4, 8, 8]).cuda()
-    pool_down = LDW_down(kernel_size = 3).cuda()
-    pool_up = LDW_up(kernel_size = 3).cuda()
+    pool_down = LDW_down(kernel_size = 2).cuda()
     print("image : ", image.shape)
     output = pool_down(image)
     print("output : ", output.shape)
-    image = pool_up(output)
+    image = pool_down.up(output)
     print("image : ", image.shape)
     #print(pool_down.regular_term_loss())
 # =============================================================================
