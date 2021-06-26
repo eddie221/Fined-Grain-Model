@@ -279,13 +279,20 @@ class ResNet(nn.Module):
                              "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.bn1 = norm_layer(self.inplanes)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
+        self.LDW_Pooling = LDW_down(3, 2)
+        self.lifting1 = nn.Sequential(self.LDW_Pooling,
+                                      Energy_attention(256),
+                                      nn.Conv2d(256, 64, 1, bias = False))
+        self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        
-        self.LDW_ds = LDW_down(2, 2)
+# =============================================================================
+#         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+#                                bias=False)
+#         self.bn1 = norm_layer(self.inplanes)
+#         self.relu = nn.ReLU(inplace=True)
+#         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+# =============================================================================
         
         self.layer1 = self._make_layer(block, Bottleneck_LDW, 64, layers[0])
         self.layer2 = self._make_layer(block, Bottleneck_LDW, 128, layers[1], stride=2)
@@ -334,7 +341,7 @@ class ResNet(nn.Module):
             else:
                 downsample = nn.Sequential(
                     #nn.Conv2d(self.inplanes, planes * block.expansion // 4, kernel_size=1, stride=1, bias=False),
-                    self.LDW_ds,
+                    self.LDW_Pooling,
                     Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
@@ -349,18 +356,20 @@ class ResNet(nn.Module):
         H = x.shape[2]
         # See note [TorchScript super()]
         x = self.conv1(x)
+        x = self.lifting1(x)
         x = self.bn1(x)
         x_head = self.relu(x)
-        x0 = self.maxpool(x_head)
+        x0 = self.lifting1(x)
+        #x0 = self.maxpool(x_head)
         
         x1 = self.layer1(x0)
         x2 = self.layer2(x1)
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
-        x = self.up1(x4, x3, self.LDW_ds.up)
-        x = self.up2(x, x2, self.LDW_ds.up)
-        x = self.up3(x, x1, self.LDW_ds.up)
-        x = self.up4(x, x_head, self.LDW_ds.up)
+        x = self.up1(x4, x3, self.LDW_Pooling.up)
+        x = self.up2(x, x2, self.LDW_Pooling.up)
+        x = self.up3(x, x1, self.LDW_Pooling.up)
+        x = self.up4(x, x_head, self.LDW_Pooling.up)
         x = torch.nn.functional.interpolate(x, size = H, mode = 'bilinear', align_corners = True)
         return x
 
