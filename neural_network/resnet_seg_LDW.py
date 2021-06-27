@@ -8,7 +8,7 @@ Created on Wed Jun  2 20:48:58 2021
 
 import torch
 import torch.nn as nn
-from neural_network.LDW_pool import LDW_down, LDW_up, Energy_attention
+from neural_network.LDW_pool import LDW_down, Energy_attention
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -324,8 +324,6 @@ class ResNet(nn.Module):
         self.lifting_pool = []
         for m in self.modules():
             if isinstance(m, LDW_down):
-                self.lifting_pool.append(m)
-            if isinstance(m, LDW_up):
                 self.lifting_pool.append(m)
 
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
