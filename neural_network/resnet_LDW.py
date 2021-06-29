@@ -296,8 +296,8 @@ def resnet101(num_classes = 1000):
     return model
 
 if __name__ == "__main__":
-    model = resnet50(10).to("cuda:0")
-    a = torch.randn([2, 3, 224, 224]).to("cuda:0")
+    model = resnet50(10)
+    a = torch.randn([2, 3, 224, 224])
     with open('../resnet50_lifting.txt', 'w') as f:
         print(model, file = f)
 # =============================================================================
@@ -312,7 +312,7 @@ if __name__ == "__main__":
 # =============================================================================
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     loss_f = torch.nn.CrossEntropyLoss()
-    label = torch.tensor([0, 1]).cuda()
+    label = torch.tensor([0, 1])
     for i in range(5):
         output = model(a)
         optim.zero_grad()

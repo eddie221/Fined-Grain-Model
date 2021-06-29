@@ -230,7 +230,6 @@ def training(job):
                     loss_t.update(loss, data.size(0))
                     correct_t.update((predicted == label).sum().item(), label.shape[0])
                     correct_t5.update((predicted5 == label.unsqueeze(1)).sum().item(), label.shape[0])
-                    
                     step += 1
                     if CON_MATRIX:
                         np.add.at(confusion_matrix[phase], tuple([predicted.cpu().numpy(), label.detach().numpy()]), 1)
