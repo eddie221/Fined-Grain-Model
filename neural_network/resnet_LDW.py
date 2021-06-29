@@ -189,8 +189,7 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_Pooling = LDW_down(5, 2)
-        self.lifting1 = nn.Sequential(self.LDW_Pooling,
+        self.lifting1 = nn.Sequential(LDW_down(64, 5, 2),
                                       Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
@@ -205,6 +204,11 @@ class Resnet(nn.Module):
         self.avg = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer([num_classes], 512 * block.expansion)
         
+        self.LDW_pools = []
+        for m in self.modules():
+            if isinstance(m, LDW_down):
+                self.LDW_pools.append(m)
+        
         
     def _make_layer(self, block, LDW_block, planes, blocks, stride = 1):
         downsample = None
@@ -218,7 +222,7 @@ class Resnet(nn.Module):
                 layers.append(block(self.inplanes, planes, stride, downsample))
             else:
                 downsample = nn.Sequential(
-                    self.LDW_Pooling,
+                    LDW_down(planes, 5, 2),
                     Energy_attention(planes * block.expansion),
                     nn.BatchNorm2d(planes * block.expansion),
                 )
@@ -313,10 +317,14 @@ if __name__ == "__main__":
     optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
     loss_f = torch.nn.CrossEntropyLoss()
     label = torch.tensor([0, 1])
+    print(len(model.LDW_pools))
     for i in range(5):
         output = model(a)
         optim.zero_grad()
-        loss = loss_f(output, label) + model.LDW_Pooling.regular_term_loss()
+        loss = loss_f(output, label) 
+        con = 0
+        for i in range(len(model.LDW_pools)):
+            con += model.LDW_pools[i].regular_term_loss()
         loss.backward()
         print(loss)
         optim.step()

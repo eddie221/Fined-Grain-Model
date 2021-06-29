@@ -27,7 +27,7 @@ if not os.path.exists('./pkl/{}/'.format(INDEX)):
 
 #print environment information
 print(torch.cuda.is_available())
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 
 #writer = SummaryWriter('../tensorflow/logs/cub_{}'.format(INDEX), comment = "224_64")
 
@@ -66,6 +66,7 @@ def create_nn_model():
     assert model_name == model.name, "Wrong model loading. Expect {} but get {}.".format(model_name, model.name)
 
     print(model)
+    print(len(model.LDW_pools))
     return model
 
 def create_opt_loss(model):
@@ -154,7 +155,10 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = model.LDW_Pooling.regular_term_loss()
+    filter_constraint = 0
+    for i in range(len(model.LDW_pools)):
+        filter_constraint += model.LDW_pools[i].regular_term_loss()
+    filter_constraint = filter_constraint / len(model.LDW_pools)
     loss = cls_loss + filter_constraint
     
     if phase == 'train':
