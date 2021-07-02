@@ -280,7 +280,7 @@ class ResNet(nn.Module):
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_Pooling = LDW_down(3, 2)
+        self.LDW_Pooling = LDW_down(5, 2)
         self.lifting1 = nn.Sequential(self.LDW_Pooling,
                                       Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
@@ -419,9 +419,8 @@ def resnet101(pretrained=False, progress=True, **kwargs):
 
 
 if __name__ == "__main__":
-    a = torch.randn([1, 3, 224, 224])
+    a = torch.randn([1, 3, 224, 224]).cuda()
     model = resnet50(num_classes=3)
-    model.eval()
-    model
+    model.eval().cuda()
     output = model(a)
     print(output.shape)

@@ -29,15 +29,17 @@ class LDW_down(nn.Module):
 #         self.high_pass_filter_v_up = torch.nn.Parameter(torch.tensor([[[[1.],
 #                                                                     [-1.]]]]))
 # =============================================================================
-        if kernel_size == 5:
-            self.low_pass_filter = torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]).cuda()
-            self.high_pass_filter = torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]).cuda()
-        elif kernel_size == 7:
-            self.low_pass_filter = torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]).cuda()
-            self.high_pass_filter = torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]).cuda()
+# =============================================================================
+#         if kernel_size == 5:
+#             self.low_pass_filter = torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]).cuda()
+#             self.high_pass_filter = torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]).cuda()
+#         elif kernel_size == 7:
+#             self.low_pass_filter = torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]).cuda()
+#             self.high_pass_filter = torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]).cuda()
+# =============================================================================
         
-        #self.low_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
-        #self.high_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
+        self.low_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
+        self.high_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
         #self.low_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.high_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.filter_constraint()
@@ -85,6 +87,61 @@ class LDW_down(nn.Module):
         elif dim == 3:
             combine = combine[:, :, :, idx_old]
         return combine
+    
+    def up(self, x):
+        if x.get_device() == -1:
+            device = "cpu"
+        else:
+            device = x.get_device()
+        # pad the feature map
+        batch, channel, height, width = x.shape
+        
+        # reconstruct ll + hl = l
+        x_l_combine = self.switch_data(x[:, 0:channel // 4, :, :], x[:, channel // 4 : channel // 2, :, :], 2)
+        x_l_combine = torch.nn.functional.pad(x_l_combine,
+                                              pad = [0, 0, self.kernel_size // 2, self.kernel_size // 2],
+                                              mode = 'reflect')
+        
+        x_l_e = torch.nn.functional.conv2d(x_l_combine,
+                                         self.high_pass_filter.permute(0, 1, 3, 2).repeat(x_l_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1))
+        x_l_o = torch.nn.functional.conv2d(x_l_combine[:, :, 1:, :],
+                                         self.low_pass_filter.permute(0, 1, 3, 2).repeat(x_l_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1))
+        x_l = self.switch_data(x_l_e, x_l_o, 2)
+        
+        # reconstruct lh + hh = h
+        x_h_combine = self.switch_data(x[:, channel // 2 : channel // 4 * 3, :, :], x[:, channel // 4 * 3 : , :, :], 2)
+        x_h_combine = torch.nn.functional.pad(x_h_combine,
+                                              pad = [0, 0, self.kernel_size // 2, self.kernel_size // 2],
+                                              mode = 'reflect')
+        x_h_e = torch.nn.functional.conv2d(x_h_combine,
+                                         self.high_pass_filter.permute(0, 1, 3, 2).repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1))
+        x_h_o = torch.nn.functional.conv2d(x_h_combine,
+                                         self.low_pass_filter.permute(0, 1, 3, 2).repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (2, 1))
+        x_h = self.switch_data(x_h_e, x_h_o, 2)
+        
+        # reconstruct l + h = x
+        x_combine = self.switch_data(x_l, x_h, 3)
+        
+        x_e = torch.nn.functional.conv2d(x_combine,
+                                         self.high_pass_filter.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (1, 2),
+                                         padding = [0, self.kernel_size // 2 if self.kernel_size != 2 else 0])
+        x_o = torch.nn.functional.conv2d(x_combine,
+                                         self.low_pass_filter.repeat(x_h_combine.shape[1], 1, 1, 1),
+                                         groups = channel // 4,
+                                         stride = (1, 2),
+                                         padding = [0, self.kernel_size // 2 if self.kernel_size != 2 else 0])
+        recover_x = self.switch_data(x_e, x_o, 3)
+        return recover_x
     
     def forward(self, x):
         channel = x.shape[1]
