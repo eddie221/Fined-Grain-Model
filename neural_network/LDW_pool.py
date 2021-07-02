@@ -10,10 +10,9 @@ import torch
 import torch.nn as nn
 
 class LDW_down(nn.Module):
-    def __init__(self, channel, kernel_size = 2, stride = None):
+    def __init__(self, kernel_size = 2, stride = None):
         super(LDW_down, self).__init__()
         self.kernel_size = kernel_size
-        self.channel = channel
         self.stride = 2
         
 # =============================================================================
@@ -30,14 +29,21 @@ class LDW_down(nn.Module):
 #         self.high_pass_filter_v_up = torch.nn.Parameter(torch.tensor([[[[1.],
 #                                                                     [-1.]]]]))
 # =============================================================================
-        self.low_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
-        self.high_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
+        if kernel_size == 5:
+            self.low_pass_filter = torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]).cuda()
+            self.high_pass_filter = torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]).cuda()
+        elif kernel_size == 7:
+            self.low_pass_filter = torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]).cuda()
+            self.high_pass_filter = torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]).cuda()
+        
+        #self.low_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
+        #self.high_pass_filter = torch.nn.Parameter(torch.rand(self.channel, 1, 1, self.kernel_size))
         #self.low_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.high_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.filter_constraint()
     
     def __repr__(self):
-        struct = "Lifting_down({}, kernel_size={}, stride={})".format(self.channel, self.kernel_size, self.stride)
+        struct = "Lifting_down(kernel_size={}, stride={})".format(self.kernel_size, self.stride)
         return struct
     
     def regular_term_loss(self):
@@ -58,7 +64,6 @@ class LDW_down(nn.Module):
         # constraint3 => H'H + L'L = 1
         hh_ll = (torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) + torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3))
         constraint3 = torch.pow(2 - hh_ll, 2).squeeze(-1)
-        
 # =============================================================================
 #         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
 #         horizontal_sum = torch.sum(torch.pow(self.low_pass_filter_h, 2).squeeze(2), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_h, 2).squeeze(2), dim = 2)
@@ -82,18 +87,19 @@ class LDW_down(nn.Module):
         return combine
     
     def forward(self, x):
+        channel = x.shape[1]
         # pad the feature map
         x = torch.nn.functional.pad(x,
                                     pad = [self.kernel_size // 2 if self.kernel_size != 2 else 0, self.kernel_size // 2 if self.kernel_size != 2 else 0, 0, 0],
                                     mode = 'reflect')
         # calculate the lifting weight different weight
         x_l = torch.nn.functional.conv2d(x, 
-                                         self.low_pass_filter,
-                                         groups = self.channel, 
+                                         self.low_pass_filter.repeat(channel, 1, 1, 1),
+                                         groups = channel, 
                                          stride = (1, self.stride))
         x_h = torch.nn.functional.conv2d(x[:, :, :, 1:], 
-                                         self.high_pass_filter,
-                                         groups = self.channel, 
+                                         self.high_pass_filter.repeat(channel, 1, 1, 1),
+                                         groups = channel, 
                                          stride = (1, self.stride))
         
         x_l = torch.nn.functional.pad(x_l,
@@ -105,19 +111,19 @@ class LDW_down(nn.Module):
         
         
         x_ll = torch.nn.functional.conv2d(x_l, 
-                                          self.low_pass_filter.permute(0, 1, 3, 2), 
+                                          self.low_pass_filter.permute(0, 1, 3, 2).repeat(channel, 1, 1, 1), 
                                           groups = x_l.shape[1], 
                                           stride = (self.stride, 1))
         x_hl = torch.nn.functional.conv2d(x_l[:, :, 1:, :], 
-                                          self.high_pass_filter.permute(0, 1, 3, 2), 
+                                          self.high_pass_filter.permute(0, 1, 3, 2).repeat(channel, 1, 1, 1), 
                                           groups = x_l.shape[1], 
                                           stride = (self.stride, 1))
         x_lh = torch.nn.functional.conv2d(x_h, 
-                                          self.low_pass_filter.permute(0, 1, 3, 2), 
+                                          self.low_pass_filter.permute(0, 1, 3, 2).repeat(channel, 1, 1, 1), 
                                           groups = x_h.shape[1], 
                                           stride = (self.stride, 1))
         x_hh = torch.nn.functional.conv2d(x_h[:, :, 1:, :], 
-                                          self.high_pass_filter.permute(0, 1, 3, 2), 
+                                          self.high_pass_filter.permute(0, 1, 3, 2).repeat(channel, 1, 1, 1), 
                                           groups = x_h.shape[1], 
                                           stride = (self.stride, 1))
         del x_l
@@ -195,7 +201,7 @@ if __name__ == "__main__":
     x_ll, x_hl, x_lh, x_hh = lifting_down(image)
     # test 2
     #image = torch.randn([2, 4, 8, 8]).cuda()
-    pool_down = LDW_down(3, kernel_size = 3)
+    pool_down = LDW_down(kernel_size = 5)
     print("image : ", image.shape)
     output = pool_down(image)
     print("output : ", output.shape)
