@@ -49,7 +49,7 @@ class LDW_down(nn.Module):
         return struct
     
     def regular_term_loss(self):
-        # low pass filter sum = 1
+        # low pass filter square sum = 1,  sum = sqrt(2)
         constraint1 = torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2).squeeze(-1)
 # =============================================================================
 #         constraint1 = torch.mean(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
@@ -63,8 +63,8 @@ class LDW_down(nn.Module):
 #                            torch.pow(torch.sum(self.high_pass_filter_h, dim = 3), 2) + torch.pow(torch.sum(self.high_pass_filter_v, dim = 2), 2), dim = 0).squeeze(-1)
 # =============================================================================
             
-        # constraint3 => H'H + L'L = 1
-        hh_ll = (torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) + torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3))
+        # constraint3 => H'H = 1, L'L = 1
+        hh_ll = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2) + torch.pow(torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3) - 1, 2))
         constraint3 = torch.pow(2 - hh_ll, 2).squeeze(-1)
 # =============================================================================
 #         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)

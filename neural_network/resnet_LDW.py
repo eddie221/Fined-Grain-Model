@@ -189,7 +189,7 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_pool = LDW_down(5, 2)
+        self.LDW_pool = LDW_down(3, 2)
         self.lifting1 = nn.Sequential(self.LDW_pool,
                                       Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
@@ -317,14 +317,14 @@ if __name__ == "__main__":
 #     param = torch.load('../pkl/fold_0_best_20210408-3.pkl')
 #     model.load_state_dict(param)
 # =============================================================================
-    optim = torch.optim.Adam(model.parameters(), lr = 1e-4)
+    optim = torch.optim.Adam(model.parameters(), lr = 1e-3)
     loss_f = torch.nn.CrossEntropyLoss()
     label = torch.tensor([0, 1])
     for i in range(5):
         output = model(a)
         optim.zero_grad()
-        loss = loss_f(output, label) 
-        con = 0
+        loss = loss_f(output, label) + model.LDW_pool.regular_term_loss()
+        print(model.LDW_pool.regular_term_loss())
         loss.backward()
         print(loss)
         optim.step()

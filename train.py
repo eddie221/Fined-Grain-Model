@@ -154,13 +154,8 @@ def train_step(model, data, label, loss_func, optimizers, phase):
     
     #loss function
     cls_loss = loss_func[0](output_1, b_label)# + loss_func[0](output_1[1], b_label) + loss_func[0](output_1[2], b_label) + loss_func[0](output_1[3], b_label)
-    filter_constraint = torch.tensor(0)
-# =============================================================================
-#     for i in range(len(model.LDW_pools)):
-#         filter_constraint += model.LDW_pools[i].regular_term_loss()
-#     filter_constraint = filter_constraint / len(model.LDW_pools)
-# =============================================================================
-    loss = cls_loss# + filter_constraint
+    filter_constraint = model.LDW_pool.regular_term_loss()
+    loss = cls_loss + filter_constraint
     
     if phase == 'train':
         loss.backward()
