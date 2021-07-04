@@ -50,7 +50,9 @@ class LDW_down(nn.Module):
     
     def regular_term_loss(self):
         # low pass filter square sum = 1,  sum = sqrt(2)
-        constraint1 = torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2).squeeze(-1)
+        constraint1 = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2) +\
+                       torch.pow(torch.sum(self.low_pass_filter) - torch.sqrt(torch.tensor(2.).cuda()), 2)).squeeze(-1)
+    
 # =============================================================================
 #         constraint1 = torch.mean(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
 #                                 torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
