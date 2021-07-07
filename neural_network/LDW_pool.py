@@ -49,9 +49,10 @@ class LDW_down(nn.Module):
         return struct
     
     def regular_term_loss(self):
-        # low pass filter square sum = 1
+        # low pass filter square sum = 1, low pass filter sum = sqrt(2)
         low_square_sum = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2)).squeeze(-1)
-        constraint1 = low_square_sum
+        low_sum = torch.pow(torch.sum(self.low_pass_filter) - 2**(1/2), 2).squeeze(-1)
+        constraint1 = low_square_sum + low_sum
         
         # high pass filter sum = 0 & high pass filter square sum = 1 => limit high pass to unit length
         high_square_sum = torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3), 2)
