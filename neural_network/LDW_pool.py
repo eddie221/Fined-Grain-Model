@@ -49,30 +49,17 @@ class LDW_down(nn.Module):
         return struct
     
     def regular_term_loss(self):
-        # low pass filter square sum = 1,  sum = sqrt(2)
-        constraint1 = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2) +\
-                       torch.pow(torch.sum(self.low_pass_filter) - torch.sqrt(torch.tensor(2.).cuda()), 2)).squeeze(-1)
-    
-# =============================================================================
-#         constraint1 = torch.mean(torch.pow(torch.sum(self.low_pass_filter_h, dim = 3, keepdim = True) - 1, 2) +\
-#                                 torch.pow(torch.sum(self.low_pass_filter_v, dim = 2, keepdim = True) - 1, 2), dim = 0).squeeze(-1)
-# =============================================================================
-        # high pass filter sum = 0 & sum((1 - weight) ** 2) = 0 => limit high pass to unit length
-        constraint2 = (torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3), 2) + torch.pow(torch.sum(self.high_pass_filter, dim = 3), 2)).squeeze(-1)
-# =============================================================================
-#         constraint2 = torch.mean(torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_h, 2), dim = 3), 2) +\
-#                        torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter_v, 2), dim = 2), 2) +\
-#                            torch.pow(torch.sum(self.high_pass_filter_h, dim = 3), 2) + torch.pow(torch.sum(self.high_pass_filter_v, dim = 2), 2), dim = 0).squeeze(-1)
-# =============================================================================
+        # low pass filter square sum = 1
+        low_square_sum = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2)).squeeze(-1)
+        constraint1 = low_square_sum
+        
+        # high pass filter sum = 0 & high pass filter square sum = 1 => limit high pass to unit length
+        high_square_sum = torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3), 2)
+        constraint2 = (high_square_sum + torch.pow(torch.sum(self.high_pass_filter, dim = 3), 2)).squeeze(-1)
             
         # constraint3 => H'H = 1, L'L = 1
-        hh_ll = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2) + torch.pow(torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3) - 1, 2))
-        constraint3 = torch.pow(2 - hh_ll, 2).squeeze(-1)
-# =============================================================================
-#         vertical_sum = torch.sum(torch.pow(self.low_pass_filter_v, 2).squeeze(-1), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_v, 2).squeeze(-1), dim = 2)
-#         horizontal_sum = torch.sum(torch.pow(self.low_pass_filter_h, 2).squeeze(2), dim = 2) + torch.sum(torch.pow(self.high_pass_filter_h, 2).squeeze(2), dim = 2)
-#         constraint3 = torch.mean(torch.pow(1 - vertical_sum, 2) + torch.pow(1 - horizontal_sum, 2), dim = 0)
-# =============================================================================
+        constraint3 = torch.pow(2 - (high_square_sum + low_square_sum), 2).squeeze(-1)
+        
         return torch.mean(constraint1 + constraint2 + constraint3).squeeze(-1).squeeze(-1)
     
     def switch_data(self, x, y, dim):

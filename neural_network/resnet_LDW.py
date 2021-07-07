@@ -191,8 +191,6 @@ class Resnet(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.LDW_pool = LDW_down(3, 2)
         self.lifting1 = nn.Sequential(self.LDW_pool,
-                                      nn.BatchNorm2d(256),
-                                      nn.ReLU(inplace = True),
                                       Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
         self.bn1 = nn.BatchNorm2d(64)
