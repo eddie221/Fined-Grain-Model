@@ -189,7 +189,7 @@ class Resnet(nn.Module):
         self.name = "resnet_LDW"
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
-        self.LDW_pool = LDW_down(3, 2)
+        self.LDW_pool = LDW_down(5, 2)
         self.lifting1 = nn.Sequential(self.LDW_pool,
                                       Energy_attention(256),
                                       nn.Conv2d(256, 64, 1, bias = False))
@@ -283,6 +283,7 @@ class Resnet(nn.Module):
         
         # layer4
         x = self.layer4(x)
+        print(x.shape)
         x = self.avg(x).view(x.shape[0], -1)
         
         x = self.fc(x)
