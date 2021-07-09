@@ -283,7 +283,6 @@ class Resnet(nn.Module):
         
         # layer4
         x = self.layer4(x)
-        print(x.shape)
         x = self.avg(x).view(x.shape[0], -1)
         
         x = self.fc(x)
