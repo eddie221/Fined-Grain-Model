@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -29,17 +28,17 @@ class LDW_down(nn.Module):
 #         self.high_pass_filter_v_up = torch.nn.Parameter(torch.tensor([[[[1.],
 #                                                                     [-1.]]]]))
 # =============================================================================
-# =============================================================================
-#         if kernel_size == 5:
-#             self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]))
-#             self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]))
-#         elif kernel_size == 7:
-#             self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]))
-#             self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]))
-# =============================================================================
+        if kernel_size == 5:
+            self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]))
+            self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]))
+        elif kernel_size == 7:
+            self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]))
+            self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]))
         
-        self.low_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
-        self.high_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
+# =============================================================================
+#         self.low_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
+#         self.high_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
+# =============================================================================
         #self.low_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.high_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.filter_constraint()
@@ -246,7 +245,7 @@ if __name__ == "__main__":
     x_ll, x_hl, x_lh, x_hh = lifting_down(image)
     # test 2
     #image = torch.randn([2, 4, 8, 8]).cuda()
-    pool_down = LDW_down(kernel_size = 5)
+    pool_down = LDW_down(kernel_size = 7)
     print("image : ", image.shape)
     output = pool_down(image)
     print("output : ", output.shape)
