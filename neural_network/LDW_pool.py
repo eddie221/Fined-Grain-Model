@@ -28,17 +28,24 @@ class LDW_down(nn.Module):
 #         self.high_pass_filter_v_up = torch.nn.Parameter(torch.tensor([[[[1.],
 #                                                                     [-1.]]]]))
 # =============================================================================
-        if kernel_size == 5:
-            self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]))
-            self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]))
-        elif kernel_size == 7:
-            self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]))
-            self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]))
+# =============================================================================
+#         if kernel_size == 5:
+#             self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025,  0.3535534, 0.8593118, 0.3535534, -0.0761025]]]]))
+#             self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0761025, -0.3535534, 0.8593118, -0.3535534, -0.0761025]]]]))
+#         elif kernel_size == 7:
+#             self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]))
+#             self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]))
+# =============================================================================
         
 # =============================================================================
 #         self.low_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
 #         self.high_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
 # =============================================================================
+        self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[1., 6., 15., 20., 15., 6., 1.]]]]))
+        self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[1., 6., 15., 20., 15., 6., 1.]]]]))
+        self.low_pass_filter.data = self.low_pass_filter / torch.sum(self.low_pass_filter, dim = 3, keepdim = True)
+        self.high_pass_filter.data = self.high_pass_filter / torch.sum(self.high_pass_filter, dim = 3, keepdim = True)
+        self.high_pass_filter.data = self.high_pass_filter - torch.mean(self.high_pass_filter, dim = 3, keepdim = True)
         #self.low_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.high_pass_filter_v = torch.nn.Parameter(torch.rand(1, 1, self.kernel_size, 1))
         #self.filter_constraint()
