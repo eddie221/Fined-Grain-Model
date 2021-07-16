@@ -34,7 +34,7 @@ class LDW_down(nn.Module):
         elif kernel_size == 7:
             self.low_pass_filter = torch.nn.Parameter(torch.tensor([[[[-0.0076129,  -0.073710695, 0.3622055, 0.8524323, 0.3622055, -0.073710695, -0.0076129]]]]))
             self.high_pass_filter = torch.nn.Parameter(torch.tensor([[[[0.0076129,  -0.073710695, -0.3622055, 0.8524323, -0.3622055, -0.073710695, 0.0076129]]]]))
-        
+        self.relu = torch.nn.ReLU()
 # =============================================================================
 #         self.low_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
 #         self.high_pass_filter = torch.nn.Parameter(torch.rand(1, 1, 1, self.kernel_size))
@@ -58,22 +58,24 @@ class LDW_down(nn.Module):
         # low pass filter square sum = 1, low pass filter sum = sqrt(2)
         low_square_sum = (torch.pow(torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) - 1, 2)).squeeze(-1)
         low_sum = torch.pow(torch.sum(self.low_pass_filter) - 2**(1/2), 2).squeeze(-1)
-        
         constraint1 = low_square_sum + low_sum
         
         # high pass filter sum = 0 & high pass filter square sum = 1 => limit high pass to unit length
         high_square_sum = torch.pow(1 - torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3), 2)
         constraint2 = (high_square_sum + torch.pow(torch.sum(self.high_pass_filter, dim = 3), 2)).squeeze(-1)
+        
         # constraint3 => H'H = 1, L'L = 1
         constraint3 = torch.pow(2 - (torch.sum(torch.pow(self.low_pass_filter, 2), dim = 3) + torch.sum(torch.pow(self.high_pass_filter, 2), dim = 3)), 2).squeeze(-1)
         
-        # symmetry
-        low_symmetry = 0
-        high_symmetry = 0
+        # highest value in center
+        constraint4 = 0
         for i in range(self.kernel_size // 2):
-            low_symmetry = self.low_pass_filter[:, :, :, i] - self.low_pass_filter[:, :, :, -(i + 1)]
-            high_symmetry = self.high_pass_filter[:, :, :, i] - self.high_pass_filter[:, :, :, -(i + 1)]
-        return torch.mean(constraint1 + constraint2 + constraint3 + high_symmetry + low_symmetry).squeeze(-1).squeeze(-1)
+            constraint4 = self.relu(self.low_pass_filter[:, :, :, i] - self.low_pass_filter[:, :, :, self.kernel_size // 2 + 1]) +\
+                self.relu(self.low_pass_filter[:, :, :, -(i + 1)] - self.low_pass_filter[:, :, :, self.kernel_size // 2 + 1]) +\
+                self.relu(self.high_pass_filter[:, :, :, i] - self.high_pass_filter[:, :, :, self.kernel_size // 2 + 1]) +\
+                self.relu(self.high_pass_filter[:, :, :, -(i + 1)] - self.high_pass_filter[:, :, :, self.kernel_size // 2 + 1])
+                
+        return torch.mean(constraint1 + constraint2 + constraint3 + constraint4).squeeze(-1).squeeze(-1)
     
     def switch_data(self, x, y, dim):
         if x.get_device() == -1:
